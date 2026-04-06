@@ -1,0 +1,731 @@
+options:
+  parameters:
+    author: DoA Thesis Project
+    catch_exceptions: 'True'
+    category: '[AoA Estimation]'
+    cmake_opt: ''
+    comment: 'WiFi channel sweep DoA estimation for BladeRF 2.0 MIMO
+
+      Select WiFi channel 1-14 to retune in real-time
+
+      Based on Wachowiak & Kryszkiewicz (2022)'
+    copyright: ''
+    description: Direction of Arrival estimation with WiFi channel selection
+    gen_cmake: 'On'
+    gen_linking: dynamic
+    generate_options: qt_gui
+    hier_block_src_path: '.:'
+    id: channel_sweep_bladerf
+    max_nouts: '0'
+    output_language: python
+    placement: (0,0)
+    qt_qss_theme: ''
+    realtime_scheduling: ''
+    run: 'True'
+    run_command: '{python} -u {filename}'
+    run_options: prompt
+    sizing_mode: fixed
+    thread_safe_setters: ''
+    title: BladeRF AoA Channel Sweep
+    window_size: ''
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [8, 8]
+    rotation: 0
+    state: enabled
+
+blocks:
+- name: antenna_spacing
+  id: variable
+  parameters:
+    comment: d/lambda = 0.0612 / (3e8/center_freq), varies per channel
+    value: 0.0612 / (3e8 / center_freq)
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [920, 12.0]
+    rotation: 0
+    state: enabled
+- name: center_freq
+  id: variable
+  parameters:
+    comment: Computed from wifi_channel. Ch14 has 12 MHz gap.
+    value: (2412e6 + (wifi_channel - 1) * 5e6) if wifi_channel <= 13 else 2484e6
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [280, 108]
+    rotation: 0
+    state: enabled
+- name: phase_cal_deg
+  id: variable_qtgui_range
+  parameters:
+    comment: Enter calibration coefficient from phase_calibration flowgraph
+    gui_hint: 0,1,1,1
+    label: Phase Cal (deg)
+    min_len: '200'
+    orient: QtCore.Qt.Horizontal
+    rangeType: float
+    start: '-180'
+    step: '0.1'
+    stop: '180'
+    value: '0'
+    widget: counter_slider
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [560, 0.0]
+    rotation: 0
+    state: enabled
+- name: phase_cal_rad
+  id: variable
+  parameters:
+    comment: ''
+    value: phase_cal_deg * 3.14159265359 / 180.0
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1048, 12.0]
+    rotation: 0
+    state: enabled
+- name: rx_gain
+  id: variable_qtgui_range
+  parameters:
+    comment: ''
+    gui_hint: 1,0,1,1
+    label: RX Gain (dB)
+    min_len: '200'
+    orient: QtCore.Qt.Horizontal
+    rangeType: float
+    start: '0'
+    step: '1'
+    stop: '60'
+    value: '40'
+    widget: counter_slider
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [400, 0.0]
+    rotation: 0
+    state: enabled
+- name: sample_rate
+  id: variable
+  parameters:
+    comment: "1 MSPS \u2014 USB 2.0 limited on Zynq"
+    value: 1e6
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [544, 108]
+    rotation: 0
+    state: enabled
+- name: snapshot_size
+  id: variable
+  parameters:
+    comment: 'Samples per MUSIC snapshot (per paper: 1024)'
+    value: '1024'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [800, 40.0]
+    rotation: 0
+    state: enabled
+- name: tone_freq
+  id: variable
+  parameters:
+    comment: TX tone offset frequency
+    value: 50e3
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [688, 12.0]
+    rotation: 0
+    state: enabled
+- name: wifi_channel
+  id: variable_qtgui_chooser
+  parameters:
+    comment: WiFi 2.4 GHz channel selector
+    gui_hint: 0,0,1,1
+    label: WiFi Channel
+    label0: Ch 1 (2412 MHz)
+    label1: Ch 2 (2417 MHz)
+    label2: Ch 3 (2422 MHz)
+    label3: Ch 4 (2427 MHz)
+    label4: Ch 5 (2432 MHz)
+    labels: '["Ch 6 (2437)", "Ch 7 (2442)", "Ch 8 (2447)", "Ch 9 (2452)", "Ch 10 (2457)",
+      "Ch 11 (2462)", "Ch 12 (2467)", "Ch 13 (2472)", "Ch 14 (2484)"]'
+    num_opts: '5'
+    option0: '1'
+    option1: '2'
+    option2: '3'
+    option3: '4'
+    option4: '5'
+    options: '[6, 7, 8, 9, 10, 11, 12, 13, 14]'
+    orient: Qt.QVBoxLayout
+    type: int
+    value: '1'
+    widget: combo_box
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [224, 744.0]
+    rotation: 0
+    state: enabled
+- name: analog_const_source_x_0
+  id: analog_const_source_x
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Calibration phase in radians
+    const: phase_cal_rad
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    type: float
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [664.0, 808]
+    rotation: 90
+    state: enabled
+- name: aoa_autocorrelate_0
+  id: aoa_autocorrelate
+  parameters:
+    affinity: ''
+    alias: ''
+    avg_method: '0'
+    comment: Compute covariance matrix for MUSIC
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_inputs: '2'
+    overlap_size: '0'
+    snapshot_size: snapshot_size
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [936, 472.0]
+    rotation: 0
+    state: enabled
+- name: aoa_music_lin_array_0
+  id: aoa_music_lin_array
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: MUSIC pseudo-spectrum for visualization
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    norm_spacing: antenna_spacing
+    num_inputs: '2'
+    num_targets: '1'
+    pspectrum_len: '1024'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1312, 712.0]
+    rotation: 0
+    state: enabled
+- name: aoa_root_music_linear_array_0
+  id: aoa_root_music_linear_array
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: 'Root-MUSIC DoA estimator
+
+      2 elements, 1 source
+
+      d/lambda varies with channel'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    norm_spacing: antenna_spacing
+    num_inputs: '2'
+    num_targets: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1312, 384.0]
+    rotation: 0
+    state: enabled
+- name: aoa_shift_phase_0
+  id: aoa_shift_phase_multiple_hier
+  parameters:
+    affinity: ''
+    alias: ''
+    comment: Apply phase calibration coefficient to CH1
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    num_signals: '1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [760, 648.0]
+    rotation: 0
+    state: enabled
+- name: band_pass_filter_0
+  id: band_pass_filter
+  parameters:
+    affinity: ''
+    alias: ''
+    beta: '6.76'
+    comment: Filter CH0
+    decim: '1'
+    gain: '1'
+    high_cutoff_freq: tone_freq + 10e3
+    interp: '1'
+    low_cutoff_freq: tone_freq - 10e3
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_rate: sample_rate
+    type: fir_filter_ccf
+    width: '5000'
+    win: window.WIN_HAMMING
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [432, 244.0]
+    rotation: 0
+    state: enabled
+- name: band_pass_filter_1
+  id: band_pass_filter
+  parameters:
+    affinity: ''
+    alias: ''
+    beta: '6.76'
+    comment: Filter CH1
+    decim: '1'
+    gain: '1'
+    high_cutoff_freq: tone_freq + 10e3
+    interp: '1'
+    low_cutoff_freq: tone_freq - 10e3
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    samp_rate: sample_rate
+    type: fir_filter_ccf
+    width: '5000'
+    win: window.WIN_HAMMING
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [432, 588.0]
+    rotation: 0
+    state: enabled
+- name: qtgui_freq_sink_x_0
+  id: qtgui_freq_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    autoscale: 'False'
+    average: '1.0'
+    axislabels: 'True'
+    bw: sample_rate
+    color1: '"blue"'
+    color10: '"dark blue"'
+    color2: '"red"'
+    color3: '"green"'
+    color4: '"black"'
+    color5: '"cyan"'
+    color6: '"magenta"'
+    color7: '"yellow"'
+    color8: '"dark red"'
+    color9: '"dark green"'
+    comment: "Spectrum \u2014 see interference per channel"
+    ctrlpanel: 'False'
+    fc: center_freq
+    fftsize: '2048'
+    freqhalf: 'True'
+    grid: 'True'
+    gui_hint: 6,0,2,2
+    label: Relative Gain
+    label1: CH0
+    label10: ''''''
+    label2: CH1
+    label3: ''''''
+    label4: ''''''
+    label5: ''''''
+    label6: ''''''
+    label7: ''''''
+    label8: ''''''
+    label9: ''''''
+    legend: 'True'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    name: '"Spectrum"'
+    nconnections: '2'
+    norm_window: 'False'
+    showports: 'False'
+    tr_chan: '0'
+    tr_level: '0.0'
+    tr_mode: qtgui.TRIG_MODE_FREE
+    tr_tag: '""'
+    type: complex
+    units: dB
+    update_time: '0.1'
+    width1: '1'
+    width10: '1'
+    width2: '1'
+    width3: '1'
+    width4: '1'
+    width5: '1'
+    width6: '1'
+    width7: '1'
+    width8: '1'
+    width9: '1'
+    wintype: window.WIN_BLACKMAN_hARRIS
+    ymax: '0'
+    ymin: '-80'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [432, 440.0]
+    rotation: 0
+    state: enabled
+- name: qtgui_number_sink_0
+  id: qtgui_number_sink
+  parameters:
+    affinity: ''
+    alias: ''
+    autoscale: 'False'
+    avg: '0.1'
+    color1: ("blue", "red")
+    color10: ("black", "black")
+    color2: ("black", "black")
+    color3: ("black", "black")
+    color4: ("black", "black")
+    color5: ("black", "black")
+    color6: ("black", "black")
+    color7: ("black", "black")
+    color8: ("black", "black")
+    color9: ("black", "black")
+    comment: ESTIMATED ANGLE OF ARRIVAL
+    factor1: '1'
+    factor10: '1'
+    factor2: '1'
+    factor3: '1'
+    factor4: '1'
+    factor5: '1'
+    factor6: '1'
+    factor7: '1'
+    factor8: '1'
+    factor9: '1'
+    graph_type: qtgui.NUM_GRAPH_HORIZ
+    gui_hint: 2,0,1,2
+    label1: AoA
+    label10: ''
+    label2: ''
+    label3: ''
+    label4: ''
+    label5: ''
+    label6: ''
+    label7: ''
+    label8: ''
+    label9: ''
+    max: '180'
+    min: '0'
+    name: '"Angle of Arrival (deg)"'
+    nconnections: '1'
+    type: float
+    unit1: deg
+    unit10: ''
+    unit2: ''
+    unit3: ''
+    unit4: ''
+    unit5: ''
+    unit6: ''
+    unit7: ''
+    unit8: ''
+    unit9: ''
+    update_time: '0.1'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1696, 352.0]
+    rotation: 0
+    state: enabled
+- name: qtgui_time_sink_x_0
+  id: qtgui_time_sink_x
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    autoscale: 'False'
+    axislabels: 'True'
+    color1: blue
+    color10: dark blue
+    color2: red
+    color3: green
+    color4: black
+    color5: cyan
+    color6: magenta
+    color7: yellow
+    color8: dark red
+    color9: dark green
+    comment: AoA estimate over time
+    ctrlpanel: 'False'
+    entags: 'True'
+    grid: 'True'
+    gui_hint: 3,0,2,2
+    label1: AoA
+    label10: Signal 10
+    label2: Signal 2
+    label3: Signal 3
+    label4: Signal 4
+    label5: Signal 5
+    label6: Signal 6
+    label7: Signal 7
+    label8: Signal 8
+    label9: Signal 9
+    legend: 'True'
+    marker1: '-1'
+    marker10: '-1'
+    marker2: '-1'
+    marker3: '-1'
+    marker4: '-1'
+    marker5: '-1'
+    marker6: '-1'
+    marker7: '-1'
+    marker8: '-1'
+    marker9: '-1'
+    name: '"AoA Time Series"'
+    nconnections: '1'
+    size: '5000'
+    srate: sample_rate/snapshot_size
+    stemplot: 'False'
+    style1: '1'
+    style10: '1'
+    style2: '1'
+    style3: '1'
+    style4: '1'
+    style5: '1'
+    style6: '1'
+    style7: '1'
+    style8: '1'
+    style9: '1'
+    tr_chan: '0'
+    tr_delay: '0'
+    tr_level: '0.0'
+    tr_mode: qtgui.TRIG_MODE_FREE
+    tr_slope: qtgui.TRIG_SLOPE_POS
+    tr_tag: '""'
+    type: float
+    update_time: '0.1'
+    width1: '1'
+    width10: '1'
+    width2: '1'
+    width3: '1'
+    width4: '1'
+    width5: '1'
+    width6: '1'
+    width7: '1'
+    width8: '1'
+    width9: '1'
+    ylabel: Angle (deg)
+    ymax: '180'
+    ymin: '0'
+    yunit: '""'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1696, 504.0]
+    rotation: 0
+    state: enabled
+- name: qtgui_vector_sink_f_0
+  id: qtgui_vector_sink_f
+  parameters:
+    affinity: ''
+    alias: ''
+    alpha1: '1.0'
+    alpha10: '1.0'
+    alpha2: '1.0'
+    alpha3: '1.0'
+    alpha4: '1.0'
+    alpha5: '1.0'
+    alpha6: '1.0'
+    alpha7: '1.0'
+    alpha8: '1.0'
+    alpha9: '1.0'
+    autoscale: 'False'
+    average: '0.2'
+    color1: '"blue"'
+    color10: '"dark blue"'
+    color2: '"red"'
+    color3: '"green"'
+    color4: '"black"'
+    color5: '"cyan"'
+    color6: '"magenta"'
+    color7: '"yellow"'
+    color8: '"dark red"'
+    color9: '"dark green"'
+    comment: MUSIC spatial spectrum
+    grid: 'True'
+    gui_hint: 5,0,1,2
+    label1: MUSIC Spectrum
+    label10: ''
+    label2: ''
+    label3: ''
+    label4: ''
+    label5: ''
+    label6: ''
+    label7: ''
+    label8: ''
+    label9: ''
+    legend: 'True'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    name: '"MUSIC Pseudo-Spectrum"'
+    nconnections: '1'
+    ref_level: '0'
+    showports: 'False'
+    update_time: '0.2'
+    vlen: '1024'
+    width1: '1'
+    width10: '1'
+    width2: '1'
+    width3: '1'
+    width4: '1'
+    width5: '1'
+    width6: '1'
+    width7: '1'
+    width8: '1'
+    width9: '1'
+    x_axis_label: '"Angle (deg)"'
+    x_start: '0'
+    x_step: 180.0/1024
+    x_units: '"deg"'
+    y_axis_label: '"Power (dB)"'
+    y_units: '"dB"'
+    ymax: '0'
+    ymin: '-60'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [1696, 676.0]
+    rotation: 0
+    state: enabled
+- name: soapy_bladerf_source_0
+  id: soapy_source_safe
+  parameters:
+    affinity: ''
+    agc0: 'False'
+    agc1: 'False'
+    alias: ''
+    amp_gain0: '0'
+    ant0: RX
+    ant1: RX
+    balance0: '0'
+    balance1: '0'
+    bw0: '0'
+    bw1: '0'
+    center_freq0: center_freq
+    center_freq1: center_freq
+    clock_rate: '0'
+    clock_source: ''
+    comment: "BladeRF 2.0 MIMO \u2014 retunes when WiFi channel changes"
+    correction0: '0'
+    correction1: '0'
+    dc_offset0: '0'
+    dc_offset1: '0'
+    dc_removal0: 'False'
+    dc_removal1: 'False'
+    dev: driver=bladerf
+    dev_args: ''
+    devname: bladerf
+    gain_mode0: Overall
+    gain_mode1: Overall
+    ifgr_gain: '59'
+    lna_gain0: '10'
+    lna_gain1: '10'
+    maxoutbuf: '0'
+    minoutbuf: '0'
+    mix_gain0: '10'
+    nchan: '2'
+    nco_freq0: '0'
+    nco_freq1: '0'
+    overall_gain0: rx_gain
+    overall_gain1: rx_gain
+    pga_gain0: '24'
+    pga_gain1: '24'
+    rf_gain0: '18'
+    rfgr_gain: '9'
+    rxvga1_gain: '5'
+    rxvga2_gain: '0'
+    samp_rate: sample_rate
+    sdrplay_agc_setpoint: '-30'
+    sdrplay_biastee: 'False'
+    sdrplay_dabnotch: 'False'
+    sdrplay_if_mode: Zero-IF
+    sdrplay_rfnotch: 'False'
+    settings0: ''
+    settings1: ''
+    stream_args: ''
+    tia_gain0: '0'
+    tia_gain1: '0'
+    tune_args0: ''
+    tune_args1: ''
+    tuner_gain0: '10'
+    type: fc32
+    vga_gain0: '10'
+  states:
+    bus_sink: false
+    bus_source: false
+    bus_structure: null
+    coordinate: [64, 328.0]
+    rotation: 0
+    state: enabled
+
+connections:
+- [analog_const_source_x_0, '0', aoa_shift_phase_0, '1']
+- [aoa_autocorrelate_0, '0', aoa_music_lin_array_0, '0']
+- [aoa_autocorrelate_0, '0', aoa_root_music_linear_array_0, '0']
+- [aoa_music_lin_array_0, '0', qtgui_vector_sink_f_0, '0']
+- [aoa_root_music_linear_array_0, '0', qtgui_number_sink_0, '0']
+- [aoa_root_music_linear_array_0, '0', qtgui_time_sink_x_0, '0']
+- [aoa_shift_phase_0, '0', aoa_autocorrelate_0, '1']
+- [band_pass_filter_0, '0', aoa_autocorrelate_0, '0']
+- [band_pass_filter_1, '0', aoa_shift_phase_0, '0']
+- [soapy_bladerf_source_0, '0', band_pass_filter_0, '0']
+- [soapy_bladerf_source_0, '0', qtgui_freq_sink_x_0, '0']
+- [soapy_bladerf_source_0, '1', band_pass_filter_1, '0']
+- [soapy_bladerf_source_0, '1', qtgui_freq_sink_x_0, '1']
+
+metadata:
+  file_format: 1
+  grc_version: 3.10.12.0

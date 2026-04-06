@@ -1,0 +1,367 @@
+<mxfile host="app.diagrams.net" modified="2026-02-26T00:00:00.000Z" agent="app.diagrams.net" version="24.0.0" type="device">
+  <diagram name="Fig 1 — System Architecture" id="fig1">
+    <mxGraphModel dx="1200" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="340" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Antenna Array -->
+        <mxCell id="f1_ant" value="2-Element&lt;br&gt;Uniform Linear&lt;br&gt;Array" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=11;strokeWidth=1.5;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="30" y="120" width="120" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- SDR Receiver -->
+        <mxCell id="f1_sdr" value="SDR Receiver&lt;br&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;(2-Channel)&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=11;strokeWidth=1.5;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="210" y="120" width="120" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- Zynq-7000 SoC outer box -->
+        <mxCell id="f1_soc" value="Zynq-7000 SoC" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=12;strokeWidth=2;fontFamily=Times New Roman;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="390" y="30" width="420" height="280" as="geometry"/>
+        </mxCell>
+
+        <!-- PL box -->
+        <mxCell id="f1_pl" value="Programmable Logic (PL)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#000000;fontSize=11;strokeWidth=1.5;fontFamily=Times New Roman;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="410" y="60" width="380" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- PL blocks -->
+        <mxCell id="f1_dma" value="AXI&lt;br&gt;DMA" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="430" y="95" width="80" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f1_fft" value="FFT&lt;br&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;(Xilinx xfft)&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="555" y="90" width="100" height="55" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f1_axi_ic" value="AXI&lt;br&gt;Interconnect" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="695" y="95" width="80" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- PL internal arrows -->
+        <mxCell id="f1_e_dma_fft" value="" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#000000;" edge="1" source="f1_dma" target="f1_fft" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f1_e_fft_axi" value="" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#000000;" edge="1" source="f1_fft" target="f1_axi_ic" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- PS box -->
+        <mxCell id="f1_ps" value="Processing System (PS) &amp;mdash; ARM Cortex-A9" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=11;strokeWidth=1.5;fontFamily=Times New Roman;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="410" y="195" width="380" height="95" as="geometry"/>
+        </mxCell>
+
+        <!-- PS blocks -->
+        <mxCell id="f1_bin" value="Bin&lt;br&gt;Selection" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="425" y="225" width="85" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f1_doa" value="DoA&lt;br&gt;Estimation" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="555" y="225" width="85" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f1_ctrl" value="System&lt;br&gt;Control" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="690" y="225" width="85" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- PS internal arrows -->
+        <mxCell id="f1_e_bin_doa" value="" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#000000;" edge="1" source="f1_bin" target="f1_doa" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f1_e_doa_ctrl" value="" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#000000;" edge="1" source="f1_doa" target="f1_ctrl" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- AXI arrow PL ↔ PS -->
+        <mxCell id="f1_e_axi" value="AXI" style="endArrow=classic;startArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;fontSize=10;fontFamily=Times New Roman;fontStyle=2;dashed=1;" edge="1" source="f1_pl" target="f1_ps" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Display output -->
+        <mxCell id="f1_disp" value="Touch&lt;br&gt;Display" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=11;strokeWidth=1.5;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="880" y="225" width="100" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- Inter-block arrows with labels -->
+        <mxCell id="f1_e_ant_sdr" value="RF" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;fontSize=9;fontFamily=Times New Roman;fontStyle=2;" edge="1" source="f1_ant" target="f1_sdr" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f1_e_sdr_soc" value="I/Q Samples&lt;br&gt;(USB)" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;fontSize=9;fontFamily=Times New Roman;fontStyle=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="f1_sdr" target="f1_soc" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f1_e_ctrl_disp" value="UART" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;fontSize=9;fontFamily=Times New Roman;fontStyle=2;" edge="1" source="f1_ctrl" target="f1_disp" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Data type labels -->
+        <mxCell id="f1_lbl_xf" value="&lt;i&gt;X&lt;/i&gt;[&lt;i&gt;k&lt;/i&gt;]" style="text;html=1;fontSize=9;fontFamily=Times New Roman;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="520" y="80" width="30" height="15" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f1_lbl_phi" value="&lt;i&gt;&amp;phi;&lt;/i&gt;[&lt;i&gt;k&lt;/i&gt;&lt;sub&gt;0&lt;/sub&gt;]" style="text;html=1;fontSize=9;fontFamily=Times New Roman;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="515" y="215" width="40" height="15" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f1_lbl_theta" value="&lt;i&gt;&amp;theta;&lt;/i&gt;&amp;#x0302;" style="text;html=1;fontSize=9;fontFamily=Times New Roman;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="650" y="215" width="25" height="15" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="Fig 2 — Signal Processing Pipeline" id="fig2">
+    <mxGraphModel dx="1200" dy="500" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="420" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Ch 0 input -->
+        <mxCell id="f2_ch0" value="&lt;i&gt;x&lt;/i&gt;&lt;sub&gt;0&lt;/sub&gt;[&lt;i&gt;n&lt;/i&gt;]" style="text;html=1;fontSize=12;fontFamily=Times New Roman;align=right;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="20" y="65" width="50" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- Ch 1 input -->
+        <mxCell id="f2_ch1" value="&lt;i&gt;x&lt;/i&gt;&lt;sub&gt;1&lt;/sub&gt;[&lt;i&gt;n&lt;/i&gt;]" style="text;html=1;fontSize=12;fontFamily=Times New Roman;align=right;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="20" y="175" width="50" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- FFT blocks -->
+        <mxCell id="f2_fft0" value="&lt;i&gt;N&lt;/i&gt;-point&lt;br&gt;FFT" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="110" y="55" width="90" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f2_fft1" value="&lt;i&gt;N&lt;/i&gt;-point&lt;br&gt;FFT" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="110" y="165" width="90" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- Bin Selection -->
+        <mxCell id="f2_bin" value="Bin Selection&lt;br&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;&lt;i&gt;k&lt;/i&gt;&lt;sub&gt;0&lt;/sub&gt; = argmax|&lt;i&gt;X&lt;/i&gt;[&lt;i&gt;k&lt;/i&gt;]|&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=11;strokeWidth=1.5;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="260" y="95" width="150" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Phase Extraction -->
+        <mxCell id="f2_phase" value="Phase Extraction&lt;br&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;&amp;Delta;&amp;phi; = &amp;ang;&lt;i&gt;X&lt;/i&gt;&lt;sub&gt;0&lt;/sub&gt;[&lt;i&gt;k&lt;/i&gt;&lt;sub&gt;0&lt;/sub&gt;] &amp;minus; &amp;ang;&lt;i&gt;X&lt;/i&gt;&lt;sub&gt;1&lt;/sub&gt;[&lt;i&gt;k&lt;/i&gt;&lt;sub&gt;0&lt;/sub&gt;]&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=11;strokeWidth=1.5;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="470" y="95" width="180" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- DoA Algorithm selector -->
+        <mxCell id="f2_doa" value="DoA Estimation" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=11;strokeWidth=1.5;fontFamily=Times New Roman;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="720" y="55" width="150" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- Algorithm sub-blocks -->
+        <mxCell id="f2_rm" value="Root-MUSIC" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="720" y="95" width="150" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="f2_mu" value="MUSIC" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="720" y="130" width="150" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="f2_mv" value="MVDR" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="720" y="165" width="150" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="f2_pd" value="Phase Difference" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="720" y="200" width="150" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- Output -->
+        <mxCell id="f2_out" value="&lt;i&gt;&amp;theta;&lt;/i&gt;&amp;#x0302;" style="text;html=1;fontSize=14;fontFamily=Times New Roman;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="920" y="140" width="40" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- PL / PS boundary -->
+        <mxCell id="f2_boundary" value="" style="endArrow=none;dashed=1;html=1;strokeWidth=1.5;strokeColor=#999999;dashPattern=12 6;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="230" y="30" as="sourcePoint"/>
+            <mxPoint x="230" y="270" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- PL label -->
+        <mxCell id="f2_pl_lbl" value="&lt;b&gt;FPGA (PL)&lt;/b&gt;" style="text;html=1;fontSize=11;fontFamily=Times New Roman;align=center;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="110" y="260" width="100" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- PS label -->
+        <mxCell id="f2_ps_lbl" value="&lt;b&gt;ARM (PS)&lt;/b&gt;" style="text;html=1;fontSize=11;fontFamily=Times New Roman;align=center;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="500" y="260" width="100" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Shading for PL region -->
+        <mxCell id="f2_pl_bg" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=none;opacity=30;" vertex="1" parent="1">
+          <mxGeometry x="80" y="30" width="150" height="230" as="geometry"/>
+        </mxCell>
+
+        <!-- Arrows -->
+        <mxCell id="f2_e_ch0_fft0" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;" edge="1" source="f2_ch0" target="f2_fft0" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f2_e_ch1_fft1" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;" edge="1" source="f2_ch1" target="f2_fft1" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f2_e_fft0_bin" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;" edge="1" source="f2_fft0" target="f2_bin" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f2_e_fft1_bin" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.7;entryDx=0;entryDy=0;" edge="1" source="f2_fft1" target="f2_bin" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f2_e_bin_phase" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;" edge="1" source="f2_bin" target="f2_phase" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f2_e_phase_doa" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="f2_phase" target="f2_rm" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Output arrows from algorithms -->
+        <mxCell id="f2_e_rm_out" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" source="f2_rm" target="f2_out" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f2_e_mu_out" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" source="f2_mu" target="f2_out" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f2_e_mv_out" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" source="f2_mv" target="f2_out" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f2_e_pd_out" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" source="f2_pd" target="f2_out" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Data labels -->
+        <mxCell id="f2_lbl_Xk0" value="&lt;i&gt;X&lt;/i&gt;&lt;sub&gt;0&lt;/sub&gt;[&lt;i&gt;k&lt;/i&gt;]" style="text;html=1;fontSize=9;fontFamily=Times New Roman;align=center;" vertex="1" parent="1">
+          <mxGeometry x="205" y="55" width="45" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="f2_lbl_Xk1" value="&lt;i&gt;X&lt;/i&gt;&lt;sub&gt;1&lt;/sub&gt;[&lt;i&gt;k&lt;/i&gt;]" style="text;html=1;fontSize=9;fontFamily=Times New Roman;align=center;" vertex="1" parent="1">
+          <mxGeometry x="205" y="175" width="45" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="f2_lbl_dphi" value="&amp;Delta;&lt;i&gt;&amp;phi;&lt;/i&gt;" style="text;html=1;fontSize=9;fontFamily=Times New Roman;align=center;" vertex="1" parent="1">
+          <mxGeometry x="660" y="85" width="30" height="15" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="Fig 3 — PL/PS Partition" id="fig3">
+    <mxGraphModel dx="1000" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="900" pageHeight="500" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- PL Box -->
+        <mxCell id="f3_pl" value="Programmable Logic (PL)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#000000;fontSize=12;strokeWidth=2;fontFamily=Times New Roman;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="50" y="30" width="800" height="170" as="geometry"/>
+        </mxCell>
+
+        <!-- PS7 -->
+        <mxCell id="f3_ps7" value="PS7&lt;br&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;(processing_system7)&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="80" y="75" width="130" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- AXI DMA -->
+        <mxCell id="f3_dma" value="AXI DMA&lt;br&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;(axi_dma)&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="270" y="75" width="120" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- FFT -->
+        <mxCell id="f3_fft" value="&lt;b&gt;FFT&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;(xfft 9.1)&lt;br&gt;&lt;/font&gt;&lt;i&gt;N&lt;/i&gt;-point transform" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="450" y="65" width="130" height="75" as="geometry"/>
+        </mxCell>
+
+        <!-- AXI Interconnect -->
+        <mxCell id="f3_axic" value="AXI&lt;br&gt;Interconnect" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="640" y="75" width="110" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- Reset -->
+        <mxCell id="f3_rst" value="Proc Sys&lt;br&gt;Reset" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#000000;fontSize=9;strokeWidth=1;fontFamily=Times New Roman;fontColor=#888888;strokeColor=#AAAAAA;" vertex="1" parent="1">
+          <mxGeometry x="770" y="155" width="65" height="35" as="geometry"/>
+        </mxCell>
+
+        <!-- PL internal arrows -->
+        <mxCell id="f3_e_ps7_dma" value="" style="endArrow=classic;startArrow=classic;html=1;strokeWidth=1;strokeColor=#000000;" edge="1" source="f3_ps7" target="f3_dma" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f3_e_dma_fft" value="AXI-Stream" style="endArrow=classic;startArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;fontSize=9;fontFamily=Times New Roman;fontStyle=2;" edge="1" source="f3_dma" target="f3_fft" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f3_e_fft_axic" value="" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#000000;" edge="1" source="f3_fft" target="f3_axic" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- HP0 arrow down from AXI Interconnect to PS DDR -->
+        <mxCell id="f3_e_hp0" value="S_AXI_HP0" style="endArrow=classic;startArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;fontSize=9;fontFamily=Times New Roman;fontStyle=2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="695" y="200" as="sourcePoint"/>
+            <mxPoint x="695" y="260" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- PS Box -->
+        <mxCell id="f3_ps" value="Processing System (PS) &amp;mdash; ARM Cortex-A9" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=12;strokeWidth=2;fontFamily=Times New Roman;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="50" y="260" width="800" height="170" as="geometry"/>
+        </mxCell>
+
+        <!-- PS blocks -->
+        <mxCell id="f3_usb" value="USB Host&lt;br&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;(SoapySDR)&lt;br&gt;I/Q Acquisition&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="80" y="305" width="120" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f3_bin" value="Bin Selection&lt;br&gt;&amp;amp;&lt;br&gt;Phase Extraction" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="260" y="305" width="120" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f3_doa" value="DoA Estimation&lt;br&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;Root-MUSIC / MUSIC&lt;br&gt;MVDR / Phase Diff&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="440" y="300" width="150" height="75" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="f3_output" value="Output&lt;br&gt;&lt;font style=&quot;font-size: 9px;&quot;&gt;UART / Display&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="650" y="310" width="110" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- PS arrows -->
+        <mxCell id="f3_e_usb_bin" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;" edge="1" source="f3_usb" target="f3_bin" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f3_e_bin_doa" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;" edge="1" source="f3_bin" target="f3_doa" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="f3_e_doa_out" value="" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#000000;" edge="1" source="f3_doa" target="f3_output" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Data flow annotation: USB to DMA -->
+        <mxCell id="f3_e_usb_dma" value="&lt;i&gt;x&lt;/i&gt;[&lt;i&gt;n&lt;/i&gt;] via DDR" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#000000;dashed=1;fontSize=9;fontFamily=Times New Roman;fontStyle=2;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" edge="1" source="f3_usb" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="140" y="260" as="targetPoint"/>
+            <Array as="points">
+              <mxPoint x="140" y="280"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Data labels on PS arrows -->
+        <mxCell id="f3_lbl_Xk" value="&lt;i&gt;X&lt;/i&gt;[&lt;i&gt;k&lt;/i&gt;]" style="text;html=1;fontSize=9;fontFamily=Times New Roman;align=center;" vertex="1" parent="1">
+          <mxGeometry x="700" y="240" width="30" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="f3_lbl_dphi" value="&amp;Delta;&lt;i&gt;&amp;phi;&lt;/i&gt;" style="text;html=1;fontSize=9;fontFamily=Times New Roman;align=center;" vertex="1" parent="1">
+          <mxGeometry x="395" y="310" width="30" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="f3_lbl_theta" value="&lt;i&gt;&amp;theta;&lt;/i&gt;&amp;#x0302;" style="text;html=1;fontSize=9;fontFamily=Times New Roman;align=center;" vertex="1" parent="1">
+          <mxGeometry x="610" y="315" width="25" height="15" as="geometry"/>
+        </mxCell>
+
+        <!-- SDR input -->
+        <mxCell id="f3_sdr_lbl" value="SDR&lt;br&gt;Receiver" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontSize=10;strokeWidth=1.5;fontFamily=Times New Roman;" vertex="1" parent="1">
+          <mxGeometry x="80" y="395" width="90" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="f3_e_sdr_usb" value="USB" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#000000;fontSize=9;fontFamily=Times New Roman;fontStyle=2;" edge="1" source="f3_sdr_lbl" target="f3_usb" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,32 @@
+# Receiver Configuration
+# BladeRF 2.0 MIMO settings for DOA experiments
+
+rf:
+  center_frequency_hz: 2.45e9    # 2.45 GHz (ISM band)
+  sample_rate_hz: 5.0e6          # 5 MS/s
+  bandwidth_hz: 3.75e6           # 0.75 × sample rate
+  rx_gain_db: 30                 # Adjust based on distance
+
+array:
+  num_channels: 2
+  antenna_spacing_m: 0.061       # λ/2 at 2.45 GHz
+  wavelength_m: 0.1224           # c / 2.45 GHz
+
+# Static inter-channel calibration (wired split calibration).
+# Convention: phase_offset_deg := angle(mean(ch0 * conj(ch1))) in degrees.
+# To remove it: rotate channel 1 by exp(+j*phase_offset_rad) before DOA.
+calibration:
+  phase_offset_deg: 0.0
+  gain_ratio: 1.0
+  source: "unset"
+  
+mimo:
+  num_buffers: 32
+  buffer_size: 16384
+  num_transfers: 16
+  stream_timeout_ms: 5000
+
+tx:
+  tone_offset_hz: 100000         # +100 kHz from center
+  tx_gain_db: 40                 # Adjust for distance
+

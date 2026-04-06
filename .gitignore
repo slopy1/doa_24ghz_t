@@ -1,0 +1,114 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data files (large, don't commit by default)
+data/*.h5
+!data/README.md
+!data/.gitkeep
+
+# But allow experiment datasets that we explicitly want to commit
+!experiments_dec21/datasets/*.h5
+
+# Results (regenerable)
+results/figures/*.png
+results/tables/*.csv
+!results/figures/.gitkeep
+!results/tables/.gitkeep
+
+# FPGA build artifacts
+fpga/vivado/
+fpga/hls/
+*.bit
+*.bin
+*.xsa
+*.log
+*.jou
+*.vcd
+*.vvp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Binary IQ data (large, transfer separately)
+*.32fc
+data/data.txt
+recordings/
+
+# Obsidian
+.obsidian/
+
+# Thesis documents (not code)
+*.docx
+*.rtf
+
+# Lock files
+*.~lock*
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Archive (reference material, external repos, large files — not part of build)
+archive/
+
+# Large CAD/3D files
+*.stp
+*.step
+
+# Large zip archives
+cora_headless/ESP32-S3-Touch-LCD-4in3_3D_Drawing.zip
+
+# Sweep results (regenerable)
+results/*.csv
+results/*.png
+results/*.json
+
+# Obsidian vault
+.obsidian/
+
+# Ruff linter cache
+.ruff_cache/
+
+# drawio backup files
+docs/.$*.bkp
+
+# VS Code workspace
+*.code-workspace
+

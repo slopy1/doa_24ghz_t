@@ -1,0 +1,220 @@
+===============================================================================
+ DoA 2.4 GHz Demo — Complete Command Reference
+ Print this or keep it open offline. No internet needed.
+===============================================================================
+
+== STEP 1: HOST PC NETWORK SETUP =============================================
+
+# Prevent NetworkManager from stripping static IP
+sudo nmcli device set enp7s0 managed no
+
+# Set host PC static IP
+sudo ip addr add 192.168.1.1/24 dev enp7s0
+
+# Verify
+ip addr show enp7s0
+# Should show: inet 192.168.1.1/24, state UP (not NO-CARRIER)
+
+
+== STEP 2: FIND SERIAL DEVICES ================================================
+
+# List all serial devices on host PC
+ls /dev/ttyUSB* /dev/ttyACM*
+
+# Expected devices:
+#   /dev/ttyUSB0  — FT232R (ESP32 display UART, through Cora's USB hub)
+#   /dev/ttyUSB1  — Cora Z7 serial console (JTAG/UART micro-USB)
+#   /dev/ttyACM0  — nRF5340 DK (port 1)
+#   /dev/ttyACM1  — nRF5340 DK (port 2)
+#
+# NOTE: Numbers may shift depending on plug-in order.
+#       Run "dmesg | tail -20" after plugging in a device to confirm.
+
+
+== STEP 3: CORA SERIAL CONSOLE (set static IP) ================================
+
+picocom -b 115200 /dev/ttyUSB1
+
+# Press Enter a few times if blank screen
+# Login: petalinux / <your password>
+
+# Set Cora static IP (required every boot)
+sudo ip addr add 192.168.1.100/24 dev enx000a35001e53
+
+# Verify on Cora
+ip addr show enx000a35001e53
+
+# Exit picocom: Ctrl-A then Ctrl-X
+
+
+== STEP 4: VERIFY SSH CONNECTION ===============================================
+
+# From host PC
+ping 192.168.1.100
+ssh petalinux@192.168.1.100
+
+
+== STEP 5: VERIFY BLADERF ON CORA =============================================
+
+# All commands below run on the Cora (via SSH)
+
+# Check BladeRF is detected
+bladeRF-cli -p
+# Expected: Nuand bladeRF 2.0 (xA4), serial number shown
+
+# SoapySDR device scan
+SoapySDRUtil --find
+# Expected: driver=bladerf, 2 RX + 2 TX channels
+
+# Full probe (verbose)
+SoapySDRUtil --probe
+
+# Test Python bindings
+python3 -c "import SoapySDR; print('SoapySDR API:', SoapySDR.getAPIVersion())"
+python3 -c "from gnuradio import soapy; print('gnuradio.soapy OK')"
+python3 -c "from gnuradio import aoa; print('gr-aoa OK')"
+
+
+== STEP 6: START nRF5340 TX (SIGNAL SOURCE) ===================================
+
+# On host PC — open new terminal
+picocom -b 115200 /dev/ttyACM0
+
+# If no prompt, try /dev/ttyACM1
+
+# --- nRF5340 Radio Test Shell Commands ---
+
+# Set TX channel (2400 + N MHz)
+#   Channel 19 = 2418 MHz (current default)
+#   Channel 20 = 2420 MHz
+#   Channel 50 = 2450 MHz = 2.45 GHz
+start_channel 19
+
+# Set TX power (dBm, range depends on board)
+output_power set 0
+
+# View current settings
+parameters_print
+
+# Start modulated carrier (better for DoA than pure carrier)
+start_tx_modulated_carrier
+
+# --- To change settings, cancel first ---
+cancel
+start_channel 50
+start_tx_modulated_carrier
+
+# --- Other TX modes ---
+start_tx_carrier                    # Pure unmodulated carrier
+start_tx_sweep                      # Sweep across channels
+start_duty_cycle_modulated_tx 50    # 50% duty cycle
+
+# --- RX mode (if needed for testing) ---
+start_rx
+
+# --- Stop everything ---
+cancel
+
+# Exit picocom: Ctrl-A then Ctrl-X
+
+
+== STEP 7A: START DOA — TOUCH SCREEN MODE =====================================
+
+# Via SSH on Cora
+sudo python3 /home/petalinux/doa/main.py
+
+# The ESP32 display controls everything:
+#   Touch CALIBRATE — runs phase calibration
+#   Touch ESTIMATE  — starts DoA estimation
+#   Touch STOP      — stops current operation
+#   Algorithm selector — cycle through Root-MUSIC, MUSIC, MVDR, Phase Diff
+
+# Stop: Ctrl-C
+
+
+== STEP 7B: START DOA — WEB DASHBOARD MODE (alternative) ======================
+
+# Via SSH on Cora
+sudo /etc/init.d/doa-controller start
+
+# Check status
+sudo /etc/init.d/doa-controller status
+
+# Open browser on host PC
+#   http://192.168.1.100:8080
+
+# Stop
+sudo /etc/init.d/doa-controller stop
+
+
+== STEP 8: CALIBRATION ========================================================
+
+# Option A: From touch screen — tap CALIBRATE
+
+# Option B: From SSH on Cora (manual)
+sudo python3 /home/petalinux/doa/phase_calibration_headless.py --freq=2.42e9 --gain=40 --duration=10
+
+# Option C: From web dashboard — click Calibrate button
+
+# Expected output: phase offset in degrees, std dev < 5 degrees (with wired cal)
+# Current state: 4.56 degree offset from last calibration
+
+
+== STEP 9: DOA ESTIMATION =====================================================
+
+# Option A: From touch screen — tap ESTIMATE
+
+# Option B: From SSH on Cora (manual)
+sudo python3 /home/petalinux/doa/aoa_estimation_headless.py --freq=2.42e9 --gain=40 --algorithm=root_music
+
+# Available algorithms: root_music, music, mvdr, phase_diff
+
+
+== TROUBLESHOOTING =============================================================
+
+PROBLEM: "No route to host" when pinging Cora
+FIX:     Re-run host PC network setup (Step 1)
+         Check Ethernet cable is plugged into BOTH ends
+
+PROBLEM: "NO-CARRIER" on ip addr show enp7s0
+FIX:     Ethernet cable not plugged in or bad cable
+
+PROBLEM: picocom "Resource temporarily unavailable"
+FIX:     Another picocom session is open on that port. Close it first.
+         Or: sudo kill $(sudo lsof -t /dev/ttyUSB1)
+
+PROBLEM: No /dev/ttyUSB* or /dev/ttyACM* devices
+FIX:     Check USB cables. Run "dmesg | tail -20" after plugging in.
+
+PROBLEM: BladeRF not found (bladeRF-cli -p shows nothing)
+FIX:     Check external 5V 2A+ power on BladeRF barrel jack.
+         Check USB connection through hub.
+         Run: sudo chmod 666 /dev/bus/usb/*/*  (if permissions issue)
+
+PROBLEM: nRF5340 shell not responding
+FIX:     Try the other ttyACM port. Press Enter. Check USB cable.
+
+PROBLEM: "command not found" on Cora
+FIX:     Make sure you're on the Cora (via SSH or picocom), not host PC.
+
+PROBLEM: Touch screen not responding
+FIX:     Check FT232R → TTL-to-RS485 → PH2.0 wiring chain.
+         Verify /dev/ttyUSB0 exists on Cora: ls /dev/ttyUSB*
+
+PROBLEM: Dashboard port 8080 stuck
+FIX:     sudo kill $(ps w | grep web_dashboard | grep -v grep | awk '{print $1}')
+         Wait 3 seconds, restart.
+
+
+== HARDWARE CHECKLIST ==========================================================
+
+[ ] Cora Z7 — barrel jack power, JP3 set to EXT
+[ ] BladeRF 2.0 xA4 — barrel jack power (5V 2A+), USB to hub
+[ ] Powered USB hub — own power adapter, connected to Cora USB-A (J11)
+[ ] FT232R + TTL-to-RS485 — USB to hub, RS485 to Waveshare PH2.0
+[ ] Waveshare ESP32-S3 display — USB-C power
+[ ] Ethernet cable — Cora to host PC
+[ ] nRF5340 DK — USB to host PC
+[ ] Antennas — 2x on BladeRF RX1 and RX2, 61.2mm spacing
+
+===============================================================================

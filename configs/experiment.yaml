@@ -1,0 +1,39 @@
+# Experiment Configuration
+# Dataset matrix for thesis experiments
+
+dataset_matrix:
+  angles_deg: [-60, -45, -30, -15, 0, 15, 30, 45, 60]
+  distances_m:
+    near: 2.0    # High SNR
+    far: 5.0     # Low SNR
+  repetitions: 10
+  capture_duration_s: 1.0
+
+snr_conditions:
+  high:
+    distance_m: 2.0
+    description: "Near distance, best-case"
+  low:
+    distance_m: 5.0
+    description: "Far distance, stress-test"
+
+drift_calibration:
+  reference_angle_deg: 0
+  num_captures: 20
+  interval_minutes: 3
+  total_duration_minutes: 60
+
+acceptance_criteria:
+  max_clipping: 2000           # max |I| or |Q|
+  tone_offset_hz: 100000       # Expected peak
+  tone_tolerance_hz: 5000      # ±5 kHz
+  min_coherence: 0.1
+  min_samples: 5000000         # 1 second at 5 MS/s
+
+analysis:
+  snapshot_size: 1024
+  num_samples_per_estimate: 50000
+  
+metrics:
+  catastrophic_threshold_deg: 20    # Errors > 20° are "catastrophic"
+

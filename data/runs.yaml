@@ -1,0 +1,103 @@
+# Run metadata for ARM vs FPGA DoA precision comparison.
+#
+# Cora RTC is unset on these runs — all timestamps show 2018-03-09 but real
+# capture date is 2026-04-03/04. File mtime is authoritative.
+#
+# true_angle_deg is APPROXIMATE (~90° ± a few deg, source not precisely
+# positioned). Treat as a nominal reference, not ground truth.
+#
+# keep: whether to include in the precision comparison.
+# group: logical grouping for pairwise analysis.
+
+defaults:
+  true_angle_deg: 90.0
+  true_angle_uncertainty_deg: 5.0   # conservative — source not on a rotator
+  warmup_seconds: 1.0               # trim only transient, keep messy steady-state
+
+runs:
+
+  # ---------- Cluster A: pre-v2-fix exploratory, excluded ----------
+  aoa_FPGA_MUSIC_20180309_170237.csv:
+    keep: false
+    reason: pre-v2-fix, exploratory
+  aoa_ARM_ROOTMUSIC_20180309_170239.csv:
+    keep: false
+    reason: pre-v2-fix, exploratory
+  aoa_ARM_ROOTMUSIC_20180309_170331.csv:
+    keep: false
+    reason: pre-v2-fix, exploratory
+  aoa_ARM_MUSIC_20180309_170446.csv:
+    keep: false
+    reason: pre-v2-fix, exploratory
+  aoa_ARM_ROOTMUSIC_20180309_170446.csv:
+    keep: false
+    reason: pre-v2-fix, exploratory
+  aoa_FPGA_ROOTMUSIC_20180309_170547.csv:
+    keep: false
+    reason: pre-v2-fix, exploratory
+  aoa_ARM_ROOTMUSIC_20180309_170557.csv:
+    keep: false
+    reason: pre-v2-fix, exploratory
+  aoa_FPGA_ROOTMUSIC_20180309_170820.csv:
+    keep: false
+    reason: pre-v2-fix, exploratory, very short
+  aoa_ARM_ROOTMUSIC_20180309_170955.csv:
+    keep: false
+    reason: pre-v2-fix, exploratory, mean 159° suggests moved source
+  aoa_FPGA_ROOTMUSIC_20180309_171058.csv:
+    keep: false
+    reason: pre-v2-fix, exploratory
+
+  # ---------- Post-v2-fix ROOTMUSIC pair at ~90° ----------
+  # Referenced in CHANGELOG 2026-04-04: "FPGA ROOTMUSIC now matches ARM
+  # results (~93° vs ~95° for the same source position)".
+  aoa_ARM_ROOTMUSIC_20180309_171310.csv:
+    keep: true
+    group: rootmusic_pair_90deg
+    true_angle_deg: 90.0
+    notes: |
+      First post-v2-fix ARM ROOTMUSIC run. 345 samples over 58s.
+      Pair with aoa_FPGA_ROOTMUSIC_20180309_171428.csv.
+  aoa_FPGA_ROOTMUSIC_20180309_171428.csv:
+    keep: true
+    group: rootmusic_pair_90deg
+    true_angle_deg: 90.0
+    notes: |
+      First post-v2-fix FPGA ROOTMUSIC run. 103 samples over 53s.
+      Main thesis figure for FPGA ≈ ARM demonstration.
+
+  # ---------- Post-v2-fix ROOTMUSIC extras ----------
+  aoa_FPGA_ROOTMUSIC_20180309_171655.csv:
+    keep: false
+    reason: |
+      Post-v2-fix but mean 58.6° — inconsistent with ~90° source.
+      UNCERTAIN: source moved? cal drift? Ask user to confirm or exclude.
+
+  # ---------- Post-v2-fix MUSIC single ----------
+  aoa_ARM_MUSIC_20180309_172644.csv:
+    keep: false
+    reason: |
+      Only 100 samples over 26s, no FPGA MUSIC counterpart in same window.
+      Borderline — can reactivate if we want more ARM MUSIC data points.
+
+  # ---------- Cluster C: MUSIC pair at ~90° ----------
+  # Longest and cleanest runs. User confirmed: source not moved between
+  # 18:11 ARM and 18:16 FPGA, no recal between them.
+  aoa_ARM_MUSIC_20180309_181138.csv:
+    keep: true
+    group: music_pair_90deg
+    true_angle_deg: 90.0
+    notes: |
+      Reference-quality ARM MUSIC: 1039 samples over 276s. Same cal state
+      as the FPGA MUSIC run immediately after.
+  aoa_FPGA_MUSIC_20180309_181642.csv:
+    keep: true
+    group: music_pair_90deg
+    true_angle_deg: 90.0
+    notes: |
+      FPGA MUSIC, 274 samples over 176s, back-to-back with ARM MUSIC above.
+      Mean ~86.6° vs ARM's 100° — expect to show FPGA MUSIC spectral bias
+      documented in CHANGELOG.
+  aoa_FPGA_MUSIC_20180309_182924.csv:
+    keep: false
+    reason: only 17 samples over 9s, too short for stats

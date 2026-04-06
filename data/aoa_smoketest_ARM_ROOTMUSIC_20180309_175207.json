@@ -1,0 +1,11 @@
+{
+  "csv": "aoa_smoketest_ARM_ROOTMUSIC_20180309_175207.csv",
+  "mode": "ARM",
+  "algorithm": "ROOTMUSIC",
+  "label": "smoketest",
+  "calibration_deg": -65.22,
+  "start_iso": "2018-03-09T17:52:07.076476",
+  "duration_s": 5.8,
+  "rows": 0,
+  "rate_hz": 0.0
+}

@@ -1,0 +1,40 @@
+# /etc/systemd/system/doa-controller.service
+#
+# Systemd service for DoA Controller on Cora Z7
+# 
+# Installation:
+#   1. Copy this file to /etc/systemd/system/
+#   2. sudo systemctl daemon-reload
+#   3. sudo systemctl enable doa-controller
+#   4. sudo systemctl start doa-controller
+#
+# Logs: journalctl -u doa-controller -f
+
+[Unit]
+Description=Direction of Arrival Controller
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=petalinux
+WorkingDirectory=/home/petalinux/doa
+ExecStart=/usr/bin/python3 /home/petalinux/doa/main.py
+Restart=on-failure
+RestartSec=10
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=doa-controller
+
+# Resource limits
+Nice=-5
+CPUQuota=80%
+
+[Install]
+WantedBy=multi-user.target

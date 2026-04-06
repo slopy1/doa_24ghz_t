@@ -1,0 +1,26 @@
+# DOA-24GHz Thesis Project Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core scientific computing
+numpy>=1.24.0
+scipy>=1.10.0
+matplotlib>=3.7.0
+
+# Data storage
+h5py>=3.8.0
+
+# Config files
+pyyaml>=6.0.1
+
+# Optional: for advanced analysis
+# pandas>=2.0.0
+# scikit-learn>=1.2.0
+
+# Hardware interface (install separately if using BladeRF)
+# pybladerf  # Build from source: https://github.com/Nuand/bladeRF
+
+# Development
+# pytest>=7.0.0
+# black>=23.0.0
+# flake8>=6.0.0
+

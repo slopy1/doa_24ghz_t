@@ -1,0 +1,80 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          doa-controller
+# Required-Start:    $local_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Description:       Direction of Arrival Controller (UART display mode)
+### END INIT INFO
+
+DAEMON=/usr/bin/python3
+DAEMON_ARGS="/home/petalinux/doa/main.py"
+PIDFILE=/var/run/doa-controller.pid
+LOGFILE=/home/petalinux/doa/logs/doa-controller.log
+ETH_DEV=enx000a35001e53
+
+case "$1" in
+    start)
+        echo "Starting doa-controller (display UART mode)..."
+
+        # Set static IP (udev renames eth0, DHCP fails)
+        ip addr add 192.168.1.100/24 dev $ETH_DEV 2>/dev/null
+
+        # Ensure directories exist
+        mkdir -p /home/petalinux/doa/logs /home/petalinux/doa/data
+        chown petalinux:petalinux /home/petalinux/doa/logs /home/petalinux/doa/data
+
+        # Wait for FT232R to enumerate (up to 10s)
+        echo -n "Waiting for /dev/ttyUSB0..."
+        for i in $(seq 1 20); do
+            [ -e /dev/ttyUSB0 ] && break
+            sleep 0.5
+        done
+        if [ -e /dev/ttyUSB0 ]; then
+            echo " found."
+        else
+            echo " NOT FOUND (starting anyway, main.py will fall back to stdin)."
+        fi
+
+        # Kill any stale processes (BusyBox ps)
+        for pid in $(ps w | grep -E 'main\.py|calibration_headless|estimation_headless' | grep -v grep | awk '{print $1}'); do
+            kill "$pid" 2>/dev/null
+        done
+        sleep 1
+
+        # NOTE: run as root (no -c petalinux). FPGA mode needs /dev/mem access,
+        # which requires root. On this single-user embedded device there's no
+        # privilege-separation benefit to running as petalinux.
+        PYTHONUNBUFFERED=1 start-stop-daemon -S -b -m -p "$PIDFILE" \
+            -x $DAEMON -- $DAEMON_ARGS \
+            >> "$LOGFILE" 2>&1
+        echo "done."
+        ;;
+    stop)
+        echo "Stopping doa-controller..."
+        start-stop-daemon -K -p "$PIDFILE"
+        # Also kill any child processes
+        for pid in $(ps w | grep -E 'main\.py|calibration_headless|estimation_headless' | grep -v grep | awk '{print $1}'); do
+            kill "$pid" 2>/dev/null
+        done
+        rm -f "$PIDFILE"
+        echo "done."
+        ;;
+    restart)
+        $0 stop
+        sleep 3
+        $0 start
+        ;;
+    status)
+        if [ -f "$PIDFILE" ] && kill -0 $(cat "$PIDFILE") 2>/dev/null; then
+            echo "doa-controller is running (PID $(cat $PIDFILE))"
+        else
+            echo "doa-controller is not running"
+        fi
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
+exit 0

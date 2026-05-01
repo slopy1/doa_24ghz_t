@@ -1,0 +1,55 @@
+// emio_doa.dts -- KV260 EMIO DoA overlay
+//
+// Compile:
+//   dtc -@ -I dts -O dtb -o emio_doa.dtbo emio_doa.dts
+//
+// Load:
+//   sudo fpgautil -b emio_doa.bit.bin -o emio_doa.dtbo -f Full -n Full
+//
+// Register/control path:
+//   doa_pipeline CSRs are NOT exposed as UIO in this overlay. They are reached
+//   through PS GPIO EMIO lines and libgpiod. AXI DMA control is exposed through
+//   dma_safe_ctrl, a 16-byte-spaced UIO shim that internally programs the stock
+//   AXI DMA control port from PL.
+//
+//   Safe DMA shim mapping:
+//     Linux offset 0x00 -> AXI DMA offset 0x00  MM2S_DMACR
+//     Linux offset 0x10 -> AXI DMA offset 0x04  MM2S_DMASR
+//     Linux offset 0x20 -> AXI DMA offset 0x08  MM2S_CURDESC
+//     Linux offset 0x40 -> AXI DMA offset 0x10  MM2S_TAILDESC
+//
+// On ZynqMP Linux, PS GPIO EMIO bit 0 is normally line 78 of the PS GPIO chip;
+// this design uses EMIO bits 0..73.
+//
+// EMIO line map relative to the EMIO base:
+//   0..4    addr[4:0]       PS output
+//   5..36   wdata[31:0]     PS output
+//   37      we              PS output
+//   38      re              PS output
+//   39      req             PS output
+//   40..71  rdata[31:0]     PS input
+//   72      done            PS input
+//   73      rdata_valid     PS input
+
+/dts-v1/;
+/plugin/;
+
+/ {
+    #address-cells = <2>;
+    #size-cells = <2>;
+
+    fragment@0 {
+        target = <&fpga_full>;
+        __overlay__ {
+            #address-cells = <2>;
+            #size-cells = <2>;
+            firmware-name = "emio_doa.bit.bin";
+
+            dma_safe_ctrl@a0000000 {
+                compatible = "generic-uio";
+                reg = <0x0 0xa0000000 0x0 0x10000>;
+                reg-names = "dma_safe_ctrl_regs";
+            };
+        };
+    };
+};

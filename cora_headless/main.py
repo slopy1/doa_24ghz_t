@@ -53,7 +53,7 @@ class Config:
     """System configuration constants."""
     
     # UART Settings
-    UART_PORT = "/dev/ttyUSB0"  # FT232RL USB-UART adapter from Waveshare PH2.0 header
+    UART_PORT = "/dev/ttyACM0"  # ESP32-S3 USB CDC (full duplex, no RS485)
     UART_BAUD = 115200
     UART_TIMEOUT = 0.1  # seconds
     
@@ -66,7 +66,7 @@ class Config:
     # Script Paths (GNU Radio generated Python scripts)
     CALIBRATION_SCRIPT = SCRIPT_DIR / "phase_calibration_headless.py"
     ESTIMATION_SCRIPT = SCRIPT_DIR / "aoa_estimation_headless.py"
-    ESTIMATION_FPGA_SCRIPT = SCRIPT_DIR / "aoa_estimation_fpga_v2.py"
+    ESTIMATION_FPGA_SCRIPT = SCRIPT_DIR / "aoa_estimation_fpga_v3.py"
     
     # Operational Parameters
     WARMUP_TIME = 30  # seconds to wait for BladeRF thermal stability
@@ -399,6 +399,7 @@ class DoAController:
             "STATUS": self.cmd_status,
             "GET_CAL": self.cmd_get_cal,
             "SET_CAL": self.cmd_set_cal,
+            "ADJUST_CAL": self.cmd_adjust_cal,
             "LABEL": self.cmd_label,
             "STOP": self.cmd_stop,
             "SHUTDOWN": self.cmd_shutdown,
@@ -480,18 +481,28 @@ class DoAController:
 
         self.state = SystemState.ESTIMATING
 
-        # Check if FPGA mode requested
+        # Parse ESTIMATE:ALGO:FILTER — filter field is optional
+        filter_type = "none"
         use_fpga = False
-        if algo and algo.upper().startswith("FPGA"):
-            use_fpga = True
-            # Parse FPGA:ALGO or just FPGA (defaults to ROOTMUSIC)
-            parts = algo.split(":", 1) if ":" in algo else [algo]
-            algo = parts[1] if len(parts) > 1 else "ROOTMUSIC"
+        if algo:
+            parts = algo.split(":")
+            # Could be: ALGO, ALGO:FILTER, FPGA:ALGO, FPGA:ALGO:FILTER
+            if parts[0].upper() == "FPGA":
+                use_fpga = True
+                algo = parts[1] if len(parts) > 1 else "ROOTMUSIC"
+                filter_type = parts[2].lower() if len(parts) > 2 else "none"
+            else:
+                algo = parts[0]
+                filter_type = parts[1].lower() if len(parts) > 1 else "none"
         else:
-            algo = algo or "ROOTMUSIC"
+            algo = "ROOTMUSIC"
+
+        if filter_type not in ("none", "bandpass", "lowpass"):
+            filter_type = "none"
 
         mode = "FPGA" if use_fpga else "ARM"
-        mode_str = f"FPGA+{algo}" if use_fpga else algo
+        filter_str = f"+{filter_type}" if filter_type != "none" else ""
+        mode_str = (f"FPGA+{algo}" if use_fpga else algo) + filter_str
 
         # Resolve the effective label for this run. A file at
         # Config.DATA_DIR / "current_label.txt" takes precedence over the
@@ -543,7 +554,8 @@ class DoAController:
         script = Config.ESTIMATION_FPGA_SCRIPT if use_fpga else Config.ESTIMATION_SCRIPT
         args = [
             f"--cal={self.calibration.phase_offset_deg}",
-            f"--algo={algo}"
+            f"--algo={algo}",
+            f"--filter={filter_type}"
         ]
 
         if not self.process_mgr.start(script, args=args,
@@ -595,6 +607,24 @@ class DoAController:
             
         except ValueError:
             self.send(f"ERROR:Invalid phase value '{arg}'")
+
+    def cmd_adjust_cal(self, arg: str):
+        """Adjust calibration by a delta (e.g., ADJUST_CAL:+5 or ADJUST_CAL:-3)."""
+        if arg is None:
+            self.send("ERROR:ADJUST_CAL requires value (e.g., ADJUST_CAL:+5)")
+            return
+        try:
+            delta = float(arg)
+            current = self.calibration.phase_offset_deg
+            new_val = current + delta
+            if not -180 <= new_val <= 180:
+                self.send(f"ERROR:Result {new_val:.2f} out of range [-180, 180]")
+                return
+            self.calibration.phase_offset_deg = new_val
+            self.send(f"CAL:{new_val:.2f}")
+            self.log(f"Calibration adjusted by {delta:+.2f}°: {current:.2f}° → {new_val:.2f}°")
+        except ValueError:
+            self.send(f"ERROR:Invalid adjustment value '{arg}'")
 
     def cmd_label(self, arg: str = None):
         """Set experiment label prepended to future CSV filenames.

@@ -1,0 +1,45 @@
+// doa_pipeline_kv260_separate.dts
+//
+// Separate overlay for create_project_kv260_separate.tcl. It exposes the
+// pipeline and DMA register windows through generic-uio without changing the
+// existing doa_pipeline.dts file.
+//
+// Compile:
+//   dtc -@ -I dts -O dtb -o doa_pipeline_kv260_separate.dtbo doa_pipeline_kv260_separate.dts
+//
+// Load:
+//   sudo fpgautil -b doa_pipeline_kv260_separate.bit.bin \
+//                 -o doa_pipeline_kv260_separate.dtbo -f Full -n Full
+//
+// UIO node order is intentional:
+//   /dev/uio0 -> doa_pipeline registers at 0xA001_0000
+//   /dev/uio1 -> axi_dma registers      at 0xA000_0000
+
+/dts-v1/;
+/plugin/;
+
+/ {
+    #address-cells = <2>;
+    #size-cells = <2>;
+
+    fragment@0 {
+        target = <&fpga_full>;
+        __overlay__ {
+            #address-cells = <2>;
+            #size-cells = <2>;
+            firmware-name = "doa_pipeline_kv260_separate.bit.bin";
+
+            doa_pipeline@a0010000 {
+                compatible = "generic-uio";
+                reg = <0x0 0xa0010000 0x0 0x10000>;
+                reg-names = "doa_pipeline_regs";
+            };
+
+            axi_dma@a0000000 {
+                compatible = "generic-uio";
+                reg = <0x0 0xa0000000 0x0 0x10000>;
+                reg-names = "axi_dma_regs";
+            };
+        };
+    };
+};

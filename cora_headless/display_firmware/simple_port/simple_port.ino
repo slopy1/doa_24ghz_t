@@ -52,9 +52,9 @@ using namespace esp_panel::board;
 // UART1 serial via PH2.0 connector for communication with Cora Z7
 // Connected via FT232RL USB-UART adapter → powered USB hub → Cora Z7
 // GPIO15 = RX, GPIO16 = TX
-#define CORA_SERIAL Serial1
-#define CORA_RX_PIN 15
-#define CORA_TX_PIN 16
+#define CORA_SERIAL Serial  // USB CDC — full duplex, no RS485 echo
+#define CORA_RX_PIN 43
+#define CORA_TX_PIN 44
 
 #define SCREEN_WIDTH    800
 #define SCREEN_HEIGHT   480
@@ -74,14 +74,27 @@ enum SystemState {
     STATE_ERROR
 };
 
+// Circular buffer for std-dev calculation
+#define STDEV_WINDOW 20
+
 struct AppState {
     SystemState state = STATE_DISCONNECTED;
     float currentAoA = 90.0;
     float calibrationPhase = 0.0;
     bool hasCalibration = false;
+    bool calFromPrefs = false;  // true if cal loaded from flash, not freshly measured
     String lastError = "";
     String selectedAlgo = "ROOTMUSIC";
+    String selectedFilter = "none";
+    String selectedLabel = "";
     unsigned long lastHeartbeat = 0;
+
+    // Run stats
+    unsigned long runStartMs = 0;
+    uint32_t sampleCount = 0;
+    float aoaHistory[STDEV_WINDOW];
+    int aoaHistoryIdx = 0;
+    int aoaHistoryCount = 0;
 };
 
 AppState g_state;
@@ -103,7 +116,13 @@ static lv_obj_t* btn_calibrate;
 static lv_obj_t* btn_estimate;
 static lv_obj_t* btn_stop;
 static lv_obj_t* dropdown_algo;
+static lv_obj_t* dropdown_filter;
+static lv_obj_t* dropdown_label;
 static lv_obj_t* label_cal_value;
+static lv_obj_t* label_current_label;
+static lv_obj_t* label_run_timer;
+static lv_obj_t* label_sample_count;
+static lv_obj_t* label_stdev;
 static lv_obj_t* msgbox_error = nullptr;
 
 // =============================================================================
@@ -119,6 +138,26 @@ void showError(const char* msg);
 // =============================================================================
 // Serial Communication (UART1 via FT232RL to Cora Z7)
 // =============================================================================
+
+float computeStdDev() {
+    if (g_state.aoaHistoryCount < 2) return 0.0;
+    int n = min(g_state.aoaHistoryCount, STDEV_WINDOW);
+    float sum = 0, sumSq = 0;
+    for (int i = 0; i < n; i++) {
+        sum += g_state.aoaHistory[i];
+        sumSq += g_state.aoaHistory[i] * g_state.aoaHistory[i];
+    }
+    float mean = sum / n;
+    float variance = (sumSq / n) - (mean * mean);
+    return (variance > 0) ? sqrt(variance) : 0.0;
+}
+
+void resetRunStats() {
+    g_state.runStartMs = millis();
+    g_state.sampleCount = 0;
+    g_state.aoaHistoryIdx = 0;
+    g_state.aoaHistoryCount = 0;
+}
 
 void sendCommand(const char* cmd) {
     CORA_SERIAL.println(cmd);
@@ -154,10 +193,16 @@ void parseResponse(const char* line) {
     if (msgType == "AOA") {
         g_state.currentAoA = msgData.toFloat();
         g_state.state = STATE_ESTIMATING;
+        // Track run stats
+        g_state.sampleCount++;
+        g_state.aoaHistory[g_state.aoaHistoryIdx] = g_state.currentAoA;
+        g_state.aoaHistoryIdx = (g_state.aoaHistoryIdx + 1) % STDEV_WINDOW;
+        if (g_state.aoaHistoryCount < STDEV_WINDOW) g_state.aoaHistoryCount++;
     }
     else if (msgType == "CAL") {
         g_state.calibrationPhase = msgData.toFloat();
         g_state.hasCalibration = true;
+        g_state.calFromPrefs = false;  // freshly measured
         preferences.putFloat("cal_phase", g_state.calibrationPhase);
     }
     else if (msgType == "STATUS") {
@@ -176,8 +221,13 @@ void parseResponse(const char* line) {
             g_state.state = STATE_CALIBRATING;
         } else if (msgData.startsWith("Starting estimation")) {
             g_state.state = STATE_ESTIMATING;
+            resetRunStats();
         } else if (msgData == "Stopped") {
             g_state.state = STATE_IDLE;
+        } else if (msgData.startsWith("Label set to ")) {
+            g_state.selectedLabel = msgData.substring(13);
+        } else if (msgData == "Label cleared") {
+            g_state.selectedLabel = "";
         }
     }
     else if (msgType == "DONE") {
@@ -225,7 +275,7 @@ static void btn_calibrate_cb(lv_event_t* e) {
 
 static void btn_estimate_cb(lv_event_t* e) {
     if (g_state.state == STATE_IDLE || g_state.state == STATE_ERROR) {
-        String cmd = "ESTIMATE:" + g_state.selectedAlgo;
+        String cmd = "ESTIMATE:" + g_state.selectedAlgo + ":" + g_state.selectedFilter;
         sendCommand(cmd.c_str());
     }
 }
@@ -240,6 +290,32 @@ static void dropdown_algo_cb(lv_event_t* e) {
     lv_dropdown_get_selected_str(dropdown, buf, sizeof(buf));
     g_state.selectedAlgo = String(buf);
     preferences.putString("algo", g_state.selectedAlgo);
+}
+
+static void dropdown_filter_cb(lv_event_t* e) {
+    lv_obj_t* dropdown = lv_event_get_target(e);
+    char buf[32];
+    lv_dropdown_get_selected_str(dropdown, buf, sizeof(buf));
+    g_state.selectedFilter = String(buf);
+    preferences.putString("filter", g_state.selectedFilter);
+}
+
+static void dropdown_label_cb(lv_event_t* e) {
+    lv_obj_t* dropdown = lv_event_get_target(e);
+    uint16_t sel = lv_dropdown_get_selected(dropdown);
+    char buf[32];
+    lv_dropdown_get_selected_str(dropdown, buf, sizeof(buf));
+
+    if (sel == 0) {
+        // "(No Label)" selected — clear it
+        g_state.selectedLabel = "";
+        sendCommand("LABEL:");
+    } else {
+        g_state.selectedLabel = String(buf);
+        String cmd = "LABEL:" + g_state.selectedLabel;
+        sendCommand(cmd.c_str());
+    }
+    preferences.putString("label", g_state.selectedLabel);
 }
 
 static void msgbox_close_cb(lv_event_t* e) {
@@ -336,8 +412,8 @@ void createUI() {
 
     // ----- Control Panel (right side) -----
     lv_obj_t* control_panel = lv_obj_create(screen_main);
-    lv_obj_set_size(control_panel, 180, 300);
-    lv_obj_align(control_panel, LV_ALIGN_RIGHT_MID, -20, 0);
+    lv_obj_set_size(control_panel, 180, 370);
+    lv_obj_align(control_panel, LV_ALIGN_RIGHT_MID, -20, 10);
     lv_obj_set_style_bg_color(control_panel, lv_color_hex(0x16213e), 0);
     lv_obj_set_style_border_width(control_panel, 0, 0);
     lv_obj_set_layout(control_panel, LV_LAYOUT_FLEX);
@@ -346,15 +422,37 @@ void createUI() {
     lv_obj_set_style_pad_all(control_panel, 10, 0);
     lv_obj_set_style_pad_row(control_panel, 10, 0);
 
+    // Label dropdown (campaign angle)
+    lv_obj_t* lbl_label = lv_label_create(control_panel);
+    lv_label_set_text(lbl_label, "Label:");
+    lv_obj_set_style_text_color(lbl_label, lv_color_hex(0xaaaaaa), 0);
+
+    dropdown_label = lv_dropdown_create(control_panel);
+    lv_dropdown_set_options(dropdown_label, "(No Label)\n50deg\n70deg\n90deg\n110deg\n130deg");
+    lv_obj_set_width(dropdown_label, 150);
+    lv_obj_add_event_cb(dropdown_label, dropdown_label_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
     // Algorithm dropdown
     lv_obj_t* algo_label = lv_label_create(control_panel);
     lv_label_set_text(algo_label, "Algorithm:");
     lv_obj_set_style_text_color(algo_label, lv_color_hex(0xaaaaaa), 0);
 
     dropdown_algo = lv_dropdown_create(control_panel);
-    lv_dropdown_set_options(dropdown_algo, "ROOTMUSIC\nMUSIC\nMVDR\nPHASEDIFF");
+    lv_dropdown_set_options(dropdown_algo,
+        "ROOTMUSIC\nMUSIC\nMVDR\nPHASEDIFF\n"
+        "FPGA:ROOTMUSIC\nFPGA:MUSIC\nFPGA:MVDR\nFPGA:PHASEDIFF");
     lv_obj_set_width(dropdown_algo, 150);
     lv_obj_add_event_cb(dropdown_algo, dropdown_algo_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    // Filter dropdown
+    lv_obj_t* filter_label = lv_label_create(control_panel);
+    lv_label_set_text(filter_label, "Filter:");
+    lv_obj_set_style_text_color(filter_label, lv_color_hex(0xaaaaaa), 0);
+
+    dropdown_filter = lv_dropdown_create(control_panel);
+    lv_dropdown_set_options(dropdown_filter, "none\nbandpass\nlowpass");
+    lv_obj_set_width(dropdown_filter, 150);
+    lv_obj_add_event_cb(dropdown_filter, dropdown_filter_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     // Calibrate button
     btn_calibrate = lv_btn_create(control_panel);
@@ -385,8 +483,8 @@ void createUI() {
 
     // ----- Info Panel (left side) -----
     lv_obj_t* info_panel = lv_obj_create(screen_main);
-    lv_obj_set_size(info_panel, 180, 200);
-    lv_obj_align(info_panel, LV_ALIGN_LEFT_MID, 20, 0);
+    lv_obj_set_size(info_panel, 180, 320);
+    lv_obj_align(info_panel, LV_ALIGN_LEFT_MID, 20, 10);
     lv_obj_set_style_bg_color(info_panel, lv_color_hex(0x16213e), 0);
     lv_obj_set_style_border_width(info_panel, 0, 0);
     lv_obj_set_layout(info_panel, LV_LAYOUT_FLEX);
@@ -401,6 +499,91 @@ void createUI() {
     lv_label_set_text(label_cal_value, "Not calibrated");
     lv_obj_set_style_text_color(label_cal_value, lv_color_hex(0xffaa00), 0);
     lv_obj_set_style_text_font(label_cal_value, &lv_font_montserrat_20, 0);
+
+    // CAL +/- buttons: fine (±1) and coarse (±5)
+    lv_obj_t* cal_btn_row1 = lv_obj_create(info_panel);
+    lv_obj_set_size(cal_btn_row1, 150, 36);
+    lv_obj_set_style_bg_opa(cal_btn_row1, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(cal_btn_row1, 0, 0);
+    lv_obj_set_style_pad_all(cal_btn_row1, 0, 0);
+    lv_obj_set_layout(cal_btn_row1, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(cal_btn_row1, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(cal_btn_row1, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t* btn_m5 = lv_btn_create(cal_btn_row1);
+    lv_obj_set_size(btn_m5, 34, 28);
+    lv_obj_set_style_bg_color(btn_m5, lv_color_hex(0x8e44ad), 0);
+    lv_obj_add_event_cb(btn_m5, [](lv_event_t* e) { sendCommand("ADJUST_CAL:-5"); }, LV_EVENT_CLICKED, NULL);
+    lv_obj_t* lbl_m5 = lv_label_create(btn_m5);
+    lv_label_set_text(lbl_m5, "-5");
+    lv_obj_center(lbl_m5);
+
+    lv_obj_t* btn_m1 = lv_btn_create(cal_btn_row1);
+    lv_obj_set_size(btn_m1, 34, 28);
+    lv_obj_set_style_bg_color(btn_m1, lv_color_hex(0x8e44ad), 0);
+    lv_obj_add_event_cb(btn_m1, [](lv_event_t* e) { sendCommand("ADJUST_CAL:-1"); }, LV_EVENT_CLICKED, NULL);
+    lv_obj_t* lbl_m1 = lv_label_create(btn_m1);
+    lv_label_set_text(lbl_m1, "-1");
+    lv_obj_center(lbl_m1);
+
+    lv_obj_t* btn_p1 = lv_btn_create(cal_btn_row1);
+    lv_obj_set_size(btn_p1, 34, 28);
+    lv_obj_set_style_bg_color(btn_p1, lv_color_hex(0x8e44ad), 0);
+    lv_obj_add_event_cb(btn_p1, [](lv_event_t* e) { sendCommand("ADJUST_CAL:+1"); }, LV_EVENT_CLICKED, NULL);
+    lv_obj_t* lbl_p1 = lv_label_create(btn_p1);
+    lv_label_set_text(lbl_p1, "+1");
+    lv_obj_center(lbl_p1);
+
+    lv_obj_t* btn_p5 = lv_btn_create(cal_btn_row1);
+    lv_obj_set_size(btn_p5, 34, 28);
+    lv_obj_set_style_bg_color(btn_p5, lv_color_hex(0x8e44ad), 0);
+    lv_obj_add_event_cb(btn_p5, [](lv_event_t* e) { sendCommand("ADJUST_CAL:+5"); }, LV_EVENT_CLICKED, NULL);
+    lv_obj_t* lbl_p5 = lv_label_create(btn_p5);
+    lv_label_set_text(lbl_p5, "+5");
+    lv_obj_center(lbl_p5);
+
+    lv_obj_t* label_title = lv_label_create(info_panel);
+    lv_label_set_text(label_title, "Label:");
+    lv_obj_set_style_text_color(label_title, lv_color_hex(0xaaaaaa), 0);
+    lv_obj_set_style_pad_top(label_title, 10, 0);
+
+    label_current_label = lv_label_create(info_panel);
+    lv_label_set_text(label_current_label, "(none)");
+    lv_obj_set_style_text_color(label_current_label, lv_color_hex(0x4a90d9), 0);
+    lv_obj_set_style_text_font(label_current_label, &lv_font_montserrat_20, 0);
+
+    // Run timer
+    lv_obj_t* timer_title = lv_label_create(info_panel);
+    lv_label_set_text(timer_title, "Run Time:");
+    lv_obj_set_style_text_color(timer_title, lv_color_hex(0xaaaaaa), 0);
+    lv_obj_set_style_pad_top(timer_title, 10, 0);
+
+    label_run_timer = lv_label_create(info_panel);
+    lv_label_set_text(label_run_timer, "--");
+    lv_obj_set_style_text_color(label_run_timer, lv_color_hex(0xffffff), 0);
+    lv_obj_set_style_text_font(label_run_timer, &lv_font_montserrat_20, 0);
+
+    // Sample count
+    lv_obj_t* count_title = lv_label_create(info_panel);
+    lv_label_set_text(count_title, "Samples:");
+    lv_obj_set_style_text_color(count_title, lv_color_hex(0xaaaaaa), 0);
+    lv_obj_set_style_pad_top(count_title, 6, 0);
+
+    label_sample_count = lv_label_create(info_panel);
+    lv_label_set_text(label_sample_count, "--");
+    lv_obj_set_style_text_color(label_sample_count, lv_color_hex(0xffffff), 0);
+    lv_obj_set_style_text_font(label_sample_count, &lv_font_montserrat_20, 0);
+
+    // Std-dev indicator
+    lv_obj_t* stdev_title = lv_label_create(info_panel);
+    lv_label_set_text(stdev_title, "Std Dev:");
+    lv_obj_set_style_text_color(stdev_title, lv_color_hex(0xaaaaaa), 0);
+    lv_obj_set_style_pad_top(stdev_title, 6, 0);
+
+    label_stdev = lv_label_create(info_panel);
+    lv_label_set_text(label_stdev, "--");
+    lv_obj_set_style_text_color(label_stdev, lv_color_hex(0xffffff), 0);
+    lv_obj_set_style_text_font(label_stdev, &lv_font_montserrat_20, 0);
 }
 
 // =============================================================================
@@ -438,15 +621,65 @@ void updateUI() {
     snprintf(aoa_str, sizeof(aoa_str), "%.1f deg", g_state.currentAoA);
     lv_label_set_text(label_aoa_value, aoa_str);
 
-    // Update calibration display
+    // Update calibration display (yellow if from saved prefs, green if fresh)
     if (g_state.hasCalibration) {
         char cal_str[32];
         snprintf(cal_str, sizeof(cal_str), "%.2f deg", g_state.calibrationPhase);
         lv_label_set_text(label_cal_value, cal_str);
-        lv_obj_set_style_text_color(label_cal_value, lv_color_hex(0x2ecc71), 0);
+        if (g_state.calFromPrefs) {
+            lv_obj_set_style_text_color(label_cal_value, lv_color_hex(0xffaa00), 0);  // yellow = stale
+        } else {
+            lv_obj_set_style_text_color(label_cal_value, lv_color_hex(0x2ecc71), 0);  // green = fresh
+        }
     } else {
         lv_label_set_text(label_cal_value, "Not calibrated");
-        lv_obj_set_style_text_color(label_cal_value, lv_color_hex(0xffaa00), 0);
+        lv_obj_set_style_text_color(label_cal_value, lv_color_hex(0xff6b6b), 0);
+    }
+
+    // Update run timer
+    if (g_state.state == STATE_ESTIMATING && g_state.runStartMs > 0) {
+        unsigned long elapsed = (millis() - g_state.runStartMs) / 1000;
+        char timer_str[16];
+        snprintf(timer_str, sizeof(timer_str), "%lu:%02lu", elapsed / 60, elapsed % 60);
+        lv_label_set_text(label_run_timer, timer_str);
+    } else {
+        lv_label_set_text(label_run_timer, "--");
+    }
+
+    // Update sample count
+    if (g_state.state == STATE_ESTIMATING) {
+        char count_str[16];
+        snprintf(count_str, sizeof(count_str), "%lu", (unsigned long)g_state.sampleCount);
+        lv_label_set_text(label_sample_count, count_str);
+    } else {
+        lv_label_set_text(label_sample_count, "--");
+    }
+
+    // Update std-dev (color: green < 5°, yellow 5-10°, red > 10°)
+    if (g_state.state == STATE_ESTIMATING && g_state.aoaHistoryCount >= 2) {
+        float sd = computeStdDev();
+        char sd_str[16];
+        snprintf(sd_str, sizeof(sd_str), "%.1f deg", sd);
+        lv_label_set_text(label_stdev, sd_str);
+        if (sd < 5.0) {
+            lv_obj_set_style_text_color(label_stdev, lv_color_hex(0x2ecc71), 0);  // green
+        } else if (sd < 10.0) {
+            lv_obj_set_style_text_color(label_stdev, lv_color_hex(0xf1c40f), 0);  // yellow
+        } else {
+            lv_obj_set_style_text_color(label_stdev, lv_color_hex(0xe74c3c), 0);  // red
+        }
+    } else {
+        lv_label_set_text(label_stdev, "--");
+        lv_obj_set_style_text_color(label_stdev, lv_color_hex(0xffffff), 0);
+    }
+
+    // Update label display
+    if (g_state.selectedLabel.length() > 0) {
+        lv_label_set_text(label_current_label, g_state.selectedLabel.c_str());
+        lv_obj_set_style_text_color(label_current_label, lv_color_hex(0x2ecc71), 0);
+    } else {
+        lv_label_set_text(label_current_label, "(none)");
+        lv_obj_set_style_text_color(label_current_label, lv_color_hex(0x4a90d9), 0);
     }
 
     // Enable/disable buttons based on state
@@ -473,14 +706,16 @@ void updateUI() {
 // =============================================================================
 
 void setup() {
-    Serial.begin(115200);   // USB CDC — for debug/programming only
-    CORA_SERIAL.begin(115200, SERIAL_8N1, CORA_RX_PIN, CORA_TX_PIN);  // UART1 to Cora Z7
+    Serial.begin(115200);   // USB CDC — comms to Cora Z7 (full duplex)
 
     // Load persistent settings
     preferences.begin("doa", false);
     g_state.calibrationPhase = preferences.getFloat("cal_phase", 0.0);
     g_state.hasCalibration = (g_state.calibrationPhase != 0.0);
+    g_state.calFromPrefs = g_state.hasCalibration;  // yellow until freshly calibrated
     g_state.selectedAlgo = preferences.getString("algo", "ROOTMUSIC");
+    g_state.selectedFilter = preferences.getString("filter", "none");
+    g_state.selectedLabel = preferences.getString("label", "");
 
     // Initialize board (LCD + touch + backlight + IO expander)
     Board *board = new Board();
@@ -509,12 +744,38 @@ void setup() {
     createUI();
 
     // Set saved algorithm in dropdown
-    if (g_state.selectedAlgo == "MUSIC") {
-        lv_dropdown_set_selected(dropdown_algo, 1);
-    } else if (g_state.selectedAlgo == "MVDR") {
-        lv_dropdown_set_selected(dropdown_algo, 2);
-    } else if (g_state.selectedAlgo == "PHASEDIFF") {
-        lv_dropdown_set_selected(dropdown_algo, 3);
+    // Order: ROOTMUSIC(0) MUSIC(1) MVDR(2) PHASEDIFF(3)
+    //        FPGA:ROOTMUSIC(4) FPGA:MUSIC(5) FPGA:MVDR(6) FPGA:PHASEDIFF(7)
+    const char* algoOptions[] = {
+        "ROOTMUSIC", "MUSIC", "MVDR", "PHASEDIFF",
+        "FPGA:ROOTMUSIC", "FPGA:MUSIC", "FPGA:MVDR", "FPGA:PHASEDIFF"
+    };
+    for (int i = 0; i < 8; i++) {
+        if (g_state.selectedAlgo == algoOptions[i]) {
+            lv_dropdown_set_selected(dropdown_algo, i);
+            break;
+        }
+    }
+
+    // Set saved filter in dropdown
+    // Order: none(0) bandpass(1) lowpass(2)
+    if (g_state.selectedFilter == "bandpass") {
+        lv_dropdown_set_selected(dropdown_filter, 1);
+    } else if (g_state.selectedFilter == "lowpass") {
+        lv_dropdown_set_selected(dropdown_filter, 2);
+    }
+
+    // Set saved label in dropdown
+    if (g_state.selectedLabel == "50deg") {
+        lv_dropdown_set_selected(dropdown_label, 1);
+    } else if (g_state.selectedLabel == "70deg") {
+        lv_dropdown_set_selected(dropdown_label, 2);
+    } else if (g_state.selectedLabel == "90deg") {
+        lv_dropdown_set_selected(dropdown_label, 3);
+    } else if (g_state.selectedLabel == "110deg") {
+        lv_dropdown_set_selected(dropdown_label, 4);
+    } else if (g_state.selectedLabel == "130deg") {
+        lv_dropdown_set_selected(dropdown_label, 5);
     }
 
     lvgl_port_unlock();
@@ -522,6 +783,12 @@ void setup() {
     // Request initial status after a brief delay (wait for Cora to enumerate USB)
     delay(2000);
     sendCommand("STATUS");
+
+    // Sync saved label to Cora
+    if (g_state.selectedLabel.length() > 0) {
+        String cmd = "LABEL:" + g_state.selectedLabel;
+        sendCommand(cmd.c_str());
+    }
 }
 
 void loop() {
@@ -536,10 +803,16 @@ void loop() {
     // Process incoming serial data from Cora (UART1 via FT232RL)
     processSerial();
 
-    // Periodically check connection health
+    // Periodically check connection health and refresh timer
     static unsigned long lastConnectionCheck = 0;
     if (millis() - lastConnectionCheck > 1000) {
         checkConnection();
+        // Refresh timer/stats display every second while estimating
+        if (g_state.state == STATE_ESTIMATING) {
+            lvgl_port_lock(-1);
+            updateUI();
+            lvgl_port_unlock();
+        }
         lastConnectionCheck = millis();
     }
 

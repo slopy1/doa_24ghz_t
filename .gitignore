@@ -1,3 +1,5 @@
+.firecrawl/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -38,6 +40,7 @@ env/
 
 # Data files (large, don't commit by default)
 data/*.h5
+data/old/
 !data/README.md
 !data/.gitkeep
 
@@ -85,6 +88,7 @@ tmp/
 temp/
 *.tmp
 
+
 # Archive (reference material, external repos, large files — not part of build)
 archive/
 
@@ -111,4 +115,46 @@ docs/.$*.bkp
 
 # VS Code workspace
 *.code-workspace
+
+# Personal / coursework PDFs at repo root (signed forms, receipts, coursework)
+/*.pdf
+
+# Thesis chapter drafts (kept local, not pushed)
+docs/thesis/
+
+# Cora rootfs archive (large binary, not needed for KV260 path)
+fpga/phase0_rootfs.tar.gz
+
+# Abandoned KV260 stride-bug ILA harness (kept local for reference)
+fpga/vivado_kv260/bram_test/
+
+# KV260 built artifacts (.bit.bin already covered by *.bin; exclude rest of built/)
+kv260_emio_handoff/built/
+
+# KV260 Vivado project tree (regeneratable from create_emio_doa.tcl)
+kv260_emio_handoff/vivado/project_emio_doa/
+
+# Vendor demo trees (huge upstream LVGL libraries, not part of our build)
+hardware/waveshareb/ESP32-S3-Touch-LCD-4.3B-BOX-Demo/
+
+
+
+# LaTeX byproducts (thesis_main.bbl etc at repo root)
+*.bbl
+*.blg
+*.aux
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# Personal / non-thesis writing samples (kept locally)
+docs/writtingstyle/
+
+# Stray template downloads
+latex-template*.tex
+
+# Allow capture-run logs under data/ despite global *.log ignore
+!data/**/*.log
+!data/**/*.log.bad-handheld
 

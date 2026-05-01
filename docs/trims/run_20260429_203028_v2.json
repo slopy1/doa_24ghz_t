@@ -1,0 +1,7 @@
+{
+  "50":  {"arm": [20, null], "fpga": [30, null]},
+  "70":  {"arm": [20, null], "fpga": [30, null]},
+  "90":  {"arm": [20, null], "fpga": [30, null]},
+  "110": {"arm": [20, null], "fpga": [30, null]},
+  "130": {"arm": [20, null], "fpga": [30, null]}
+}

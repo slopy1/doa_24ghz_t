@@ -21,6 +21,7 @@ Requires: root access for /dev/mem (DMA + register access)
 """
 
 import numpy as np
+import json
 import mmap
 import os
 import struct
@@ -28,6 +29,7 @@ import argparse
 import sys
 import time
 import math
+from pathlib import Path
 from typing import Tuple
 
 # Try to import SoapySDR
@@ -83,6 +85,14 @@ class FPGAConfig:
     # MUSIC specific
     MUSIC_SPECTRUM_POINTS = 181
 
+    # Filtering (matches GRC flowgraph band_pass_filter settings)
+    FILTER_TYPE = "none"          # "none", "bandpass", or "lowpass"
+    TONE_FREQ = 50e3              # Bandpass center (Hz)
+    BPF_HALF_BW = 10e3            # Bandpass half-bandwidth (Hz)
+    LPF_CUTOFF = 50e3             # Lowpass cutoff (Hz)
+    FILTER_NUM_TAPS = 201         # FIR filter length
+    FILTER_METHOD = "fft"         # "fft" or "timedomain"
+
     DEBUG = False
 
     @classmethod
@@ -101,7 +111,69 @@ class FPGAConfig:
             cls.CONTINUOUS = False
         if hasattr(args, 'debug') and args.debug:
             cls.DEBUG = True
+        if hasattr(args, 'filter') and args.filter:
+            cls.FILTER_TYPE = args.filter.lower()
+        if hasattr(args, 'tone_freq') and args.tone_freq is not None:
+            cls.TONE_FREQ = float(args.tone_freq)
+        if hasattr(args, 'lpf_cutoff') and args.lpf_cutoff is not None:
+            cls.LPF_CUTOFF = float(args.lpf_cutoff)
+        if hasattr(args, 'filter_method') and args.filter_method:
+            cls.FILTER_METHOD = args.filter_method.lower()
         return cls
+
+
+# =============================================================================
+# FIR Filter Design (NumPy only — no scipy on Cora)
+# =============================================================================
+
+def _sinc_lowpass(cutoff_hz: float, fs: float, num_taps: int) -> np.ndarray:
+    """Design a lowpass FIR filter using windowed sinc method."""
+    fc = cutoff_hz / fs
+    n = np.arange(num_taps)
+    mid = (num_taps - 1) / 2.0
+    h = np.sinc(2 * fc * (n - mid))
+    h *= np.hamming(num_taps)
+    h /= np.sum(h)
+    return h
+
+
+def design_filter(config) -> np.ndarray | None:
+    """Design FIR filter taps based on config. Returns None if no filtering."""
+    if config.FILTER_TYPE == "none":
+        return None
+
+    fs = config.SAMPLE_RATE
+    N = config.FILTER_NUM_TAPS
+
+    if config.FILTER_TYPE == "lowpass":
+        taps = _sinc_lowpass(config.LPF_CUTOFF, fs, N)
+    elif config.FILTER_TYPE == "bandpass":
+        f_low = config.TONE_FREQ - config.BPF_HALF_BW
+        f_high = config.TONE_FREQ + config.BPF_HALF_BW
+        lp_high = _sinc_lowpass(f_high, fs, N)
+        lp_low = _sinc_lowpass(f_low, fs, N)
+        taps = lp_high - lp_low
+        taps /= np.max(np.abs(np.fft.fft(taps)))
+    else:
+        return None
+
+    return taps
+
+
+def apply_filter_timedomain(signal: np.ndarray, taps: np.ndarray) -> np.ndarray:
+    """Apply FIR filter via time-domain convolution (simple, slower)."""
+    return np.convolve(signal, taps, mode='same')
+
+
+def apply_filter_fft(signal: np.ndarray, taps: np.ndarray) -> np.ndarray:
+    """Apply FIR filter via FFT convolution (much faster on Cortex-A9)."""
+    n = len(signal) + len(taps) - 1
+    nfft = 1
+    while nfft < n:
+        nfft <<= 1
+    result = np.fft.ifft(np.fft.fft(signal, nfft) * np.fft.fft(taps, nfft))
+    start = (len(taps) - 1) // 2
+    return result[start:start + len(signal)]
 
 
 # =============================================================================
@@ -423,23 +495,50 @@ def run_estimation(config: FPGAConfig):
         return
 
     algorithm = config.ALGORITHM
+    cal_file = Path(__file__).parent / "data" / "calibration.json"
+    # Design filter once
+    fir_taps = design_filter(config)
+    if fir_taps is not None:
+        apply_filter = apply_filter_fft if config.FILTER_METHOD == "fft" else apply_filter_timedomain
+        print(f"# Filter: {config.FILTER_TYPE} ({len(fir_taps)} taps, {config.FILTER_METHOD})")
+    else:
+        apply_filter = None
+        print(f"# Filter: none")
+
     print(f"# FPGA-accelerated DoA estimation (v2 — SC16 r00/r11)")
     print(f"# Algorithm: {algorithm}")
     print(f"# Calibration: {config.PHASE_CAL_DEG}")
     print(f"# Snapshot size: {config.SNAPSHOT_SIZE}")
 
     samples_per_update = config.SNAPSHOT_SIZE * config.NUM_SNAPSHOTS
+    current_cal = config.PHASE_CAL_DEG
 
     try:
         iteration = 0
         while True:
             start_time = time.time()
 
+            # Hot-reload calibration from file
+            try:
+                with open(cal_file) as f:
+                    cal_data = json.load(f)
+                new_cal = cal_data.get("phase_offset_deg", current_cal)
+                if new_cal != current_cal:
+                    print(f"# Calibration updated: {current_cal:.2f}° → {new_cal:.2f}°")
+                    current_cal = new_cal
+            except (FileNotFoundError, json.JSONDecodeError):
+                pass
+
             # Read all samples for this update (same amount as ARM version)
             ch0_all, ch1_all = source.read_samples(samples_per_update)
 
+            # Apply FIR filter (bandpass or lowpass) to both channels
+            if apply_filter is not None:
+                ch0_all = apply_filter(ch0_all, fir_taps)
+                ch1_all = apply_filter(ch1_all, fir_taps)
+
             # Apply calibration
-            ch1_all_cal = apply_calibration(ch1_all, config.PHASE_CAL_DEG)
+            ch1_all_cal = apply_calibration(ch1_all, current_cal)
 
             # === FPGA PATH: average cross-correlation over multiple snapshots ===
             acc_re = 0
@@ -470,6 +569,23 @@ def run_estimation(config: FPGAConfig):
                 acc_r00 += float(np.sum(ch0_i.astype(np.int64)**2 + ch0_q.astype(np.int64)**2))
                 acc_r11 += float(np.sum(ch1_i.astype(np.int64)**2 + ch1_q.astype(np.int64)**2))
                 # --- end v2 FIX ---
+
+                # --- DEBUG: compare FPGA xcorr with ARM (NumPy) reference ---
+                if config.DEBUG and iteration < 5 and k == 0:
+                    # ARM reference: ch0 * conj(ch1) in SC16 integer math
+                    arm_re = int(np.sum(ch0_i.astype(np.int64) * ch1_i.astype(np.int64)
+                                      + ch0_q.astype(np.int64) * ch1_q.astype(np.int64)))
+                    arm_im = int(np.sum(ch0_q.astype(np.int64) * ch1_i.astype(np.int64)
+                                      - ch0_i.astype(np.int64) * ch1_q.astype(np.int64)))
+                    phase_fpga = math.degrees(math.atan2(xi, xr)) if (xr or xi) else float('nan')
+                    phase_arm = math.degrees(math.atan2(arm_im, arm_re)) if (arm_re or arm_im) else float('nan')
+                    re_match = "OK" if xr == arm_re else f"MISMATCH (diff={xr - arm_re})"
+                    im_match = "OK" if xi == arm_im else f"MISMATCH (diff={xi - arm_im})"
+                    print(f"# DEBUG iter={iteration} snap=0:")
+                    print(f"#   FPGA  re={xr:>12d}  im={xi:>12d}  phase={phase_fpga:>8.2f}°")
+                    print(f"#   ARM   re={arm_re:>12d}  im={arm_im:>12d}  phase={phase_arm:>8.2f}°")
+                    print(f"#   re: {re_match}  im: {im_match}")
+                # --- end DEBUG ---
 
             # Average
             xcorr_re = acc_re / n_snap
@@ -544,6 +660,16 @@ def main():
                         help="Single estimate then exit")
     parser.add_argument("--debug", action="store_true",
                         help="Print FPGA vs ARM comparison for first 5 iterations")
+    parser.add_argument("--filter", type=str, default="none",
+                        choices=["none", "bandpass", "lowpass"],
+                        help="FIR filter type (default: none)")
+    parser.add_argument("--tone-freq", type=float, dest="tone_freq",
+                        help="Bandpass center frequency in Hz (default: 50000)")
+    parser.add_argument("--lpf-cutoff", type=float, dest="lpf_cutoff",
+                        help="Lowpass cutoff frequency in Hz (default: 50000)")
+    parser.add_argument("--filter-method", type=str, dest="filter_method",
+                        default="fft", choices=["fft", "timedomain"],
+                        help="Filter implementation: fft (fast) or timedomain (slow, for comparison)")
 
     args = parser.parse_args()
     config = FPGAConfig.from_args(args)

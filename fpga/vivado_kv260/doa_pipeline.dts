@@ -1,0 +1,61 @@
+// doa_pipeline.dts — Device tree overlay for KV260 DoA pipeline
+//
+// Exposes doa_pipeline and axi_dma as generic-uio nodes so Python can
+// access registers via /dev/uio0 and /dev/uio1 without CONFIG_STRICT_DEVMEM.
+//
+// Compile:   dtc -@ -I dts -O dtb -o doa_pipeline.dtbo doa_pipeline.dts
+// Load:      sudo fpgautil -b doa_pipeline.bit.bin -o doa_pipeline.dtbo \
+//                          -f Full -n Full
+// Or:        sudo xmutil loadapp doa   (requires /lib/firmware/xilinx/doa/)
+//
+// Physical addresses MUST match the Vivado BD address editor auto-assignment
+// (see create_project.tcl address editor section). Vivado auto-assigns in
+// alphabetical BD-cell-name order:
+//   axi_dma_0      → 0xA000_0000, 64 KB   (alphabetically first)
+//   doa_pipeline_0 → 0xA001_0000, 64 KB
+// These are in the HPM0_FPD 256 MB aperture starting at 0xA000_0000 on the
+// ZU+ (Kria K26) — NOT 0x8000_0000, which is HPM0_LPD (low-power domain).
+//
+// DTS node order (below) determines UIO device numbering, NOT address:
+//   doa_pipeline listed first → /dev/uio0
+//   axi_dma     listed second → /dev/uio1
+//
+// On ZU+, device tree reg values are 4-cell <addr_hi addr_lo size_hi size_lo>.
+
+/dts-v1/;
+/plugin/;
+
+/ {
+    fragment@0 {
+        // Target &fpga_full (the fpga-region node), NOT &amba.
+        // Rationale: &amba is the PS AMBA bus with PM-domain integration. When
+        // we add PL peripherals as children, the kernel tries to manage their
+        // clocks/resets alongside PS peripherals — this causes PS PLL/clock
+        // glitches during overlay apply that kill the GEM ethernet driver and
+        // hang SSH on KV260 Ubuntu 24.04.
+        // &fpga_full is a fpga-region specifically for PL peripherals; kernel
+        // does NOT apply PS PM to its children. Verified via:
+        //   ls /proc/device-tree/__symbols__ | grep -i fpga
+        target = <&fpga_full>;
+        __overlay__ {
+            #address-cells = <2>;
+            #size-cells = <2>;
+            firmware-name = "doa_pipeline.bit.bin";
+            ranges;
+
+            // doa_pipeline AXI-Lite
+            doa_pipeline@a0010000 {
+                compatible = "generic-uio";
+                reg = <0x0 0xa0010000 0x0 0x10000>;
+                reg-names = "doa_pipeline_regs";
+            };
+
+            // axi_dma AXI-Lite
+            axi_dma@a0000000 {
+                compatible = "generic-uio";
+                reg = <0x0 0xa0000000 0x0 0x10000>;
+                reg-names = "axi_dma_regs";
+            };
+        };
+    };
+};

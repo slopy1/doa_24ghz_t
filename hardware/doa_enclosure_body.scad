@@ -96,7 +96,7 @@ bladerf_hole_inset_front = 5.76;   // from front edge
 // Position of BladeRF PCB origin in interior coords
 // 5mm gap from right wall
 bladerf_pos_x = interior_w - 5 - bladerf_pcb_w;
-bladerf_pos_y = (interior_d - bladerf_pcb_d) / 1.6;  // shifted forward (was /2 for centered)
+bladerf_pos_y = (interior_d - bladerf_pcb_d) / 4.5;  // shifted forward (was /2 for centered)
 
 // Hole positions relative to PCB origin
 bladerf_holes = [
@@ -226,14 +226,14 @@ ledge_drop   = 2;    // distance from top edge to top of ledge
 
 lid_boss_d = 8;
 
-// Two diagonal bosses at front-right and back-left interior corners.
+// Two diagonal bosses at front-left and back-right interior corners.
 // The snap-fit ledge provides primary retention around the full perimeter;
 // these two M3 screw points just resist lid lift-off. Diagonal placement
-// anchors one screw over the BladeRF front corner and the other over the
-// Cora back corner. Clears all 8 board standoffs in 3D.
+// anchors one screw over the Cora front corner and the other over the
+// BladeRF back corner. Clears all 8 board standoffs in 3D.
 lid_boss_pos = [
-    [interior_w - 8,   8],                  // front-right
-    [8,                interior_d - 8]      // back-left
+    [8,                8],                  // front-left
+    [interior_w - 8,   interior_d - 8]      // back-right
 ];
 
 // =============================================================================
@@ -261,7 +261,7 @@ difference() {
 }
 
 // Preview boards — uncomment to visualize:
- %preview_boards();
+// %preview_boards();
 
 // =============================================================================
 // MODULES
@@ -463,7 +463,7 @@ module left_dc_barrel_cutout() {
 // --- Fan cutouts (left and right walls) ---
 module fan_cutouts() {
     // Left wall
-    translate([-0.1, fan_y_center, fan_z_center])
+    translate([-0.1, fan_y_center-12, fan_z_center])
     rotate([0, 90, 0]) {
         cylinder(d=fan_hole_d, h=wall + 0.2);
         for (dx=[-1,1], dy=[-1,1])

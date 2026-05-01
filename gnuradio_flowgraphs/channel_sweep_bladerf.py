@@ -439,8 +439,8 @@ class channel_sweep_bladerf(gr.top_block, Qt.QWidget):
 
     def set_wifi_channel(self, wifi_channel):
         self.wifi_channel = wifi_channel
-        self._wifi_channel_callback(self.wifi_channel)
         self.set_center_freq((2412e6 + (self.wifi_channel - 1) * 5e6) if self.wifi_channel <= 13 else 2484e6)
+        self._wifi_channel_callback(self.wifi_channel)
 
     def get_phase_cal_deg(self):
         return self.phase_cal_deg
@@ -455,9 +455,9 @@ class channel_sweep_bladerf(gr.top_block, Qt.QWidget):
     def set_center_freq(self, center_freq):
         self.center_freq = center_freq
         self.set_antenna_spacing(0.0612 / (3e8 / self.center_freq))
+        self.qtgui_freq_sink_x_0.set_frequency_range(self.center_freq, self.sample_rate)
         self.soapy_bladerf_source_0.set_frequency(0, self.center_freq)
         self.soapy_bladerf_source_0.set_frequency(1, self.center_freq)
-        self.qtgui_freq_sink_x_0.set_frequency_range(self.center_freq, self.sample_rate)
 
     def get_tone_freq(self):
         return self.tone_freq

@@ -4,7 +4,7 @@
 //
 // Mates with doa_enclosure_body.scad. Drops onto the body's perimeter snap
 // ledge and is retained by two M3 screws into the body's diagonal corner
-// bosses.
+// bosses (front-left and back-right).
 //
 // Houses a Waveshare ESP32-S3-Touch-LCD-4.3 mounted glass-side up, with
 // cables (UART/RS-485/power) feeding down into the enclosure interior.
@@ -21,10 +21,11 @@
 //
 // Retention strategy:
 //   Solid lid with an active-area window cut through for the screen.
-//   On the underside, a U-shaped pocket (walls on the two long sides,
-//   open on both short ends for cables) locates the PCB. Four M2 bosses
-//   inside the pocket support the PCB; self-tapping screws from below
-//   secure it. Cables route out both open short ends into the enclosure.
+//   Two slide-in rails on the long sides form channels that capture the
+//   PCB edges. The display slides in from the front short end (low-Y)
+//   and a stop wall at the back short end (high-Y) prevents over-insertion.
+//   A small detent bump near the entry provides friction retention.
+//   Front short end stays open for cable routing.
 //
 // Print orientation: lid flat on bed, top face up (lip hangs down).
 // =============================================================================
@@ -47,8 +48,8 @@ ledge_drop = 2;       // distance from wall top down to top of body ledge
 
 // Body's two diagonal M3 retention bosses (interior coords, from body SCAD)
 lid_boss_pos = [
-    [interior_w - 8,   8],                  // front-right
-    [8,                interior_d - 8]      // back-left
+    [8,                8],                  // front-left
+    [interior_w - 8,   interior_d - 8]      // back-right
 ];
 m3_clear_d = 3.4;
 
@@ -80,21 +81,27 @@ ws_active_d   =  54.36;
 ws_active_off_x = 5.23;   // from left PCB edge  (106.10 - 95.54 - 5.33)
 ws_active_off_y = 9.09;   // from "bottom" PCB edge (ribbon side)
 
-// Factory mounting holes — used for M2 screw-down retention.
-ws_hole_inset = 4.00;
-ws_hole_cx    = 98.00;
-ws_hole_cy    = 60.00;
-ws_hole_measured_d = 2.28;    // measured; M2 clearance fit
+// Factory mounting holes — not used for slide-in retention, kept for reference.
+// ws_hole_inset = 4.00;
+// ws_hole_cx    = 98.00;
+// ws_hole_cy    = 60.00;
+// ws_hole_measured_d = 2.28;
 
-// M2 screw parameters
-ws_m2_tap_d    = 1.6;     // M2 self-tap pilot (into plastic boss)
-ws_boss_od     = 6.0;     // boss outer diameter
-ws_boss_h      = 3.0;     // boss height below lid (PCB rests on these)
+// Slide-in rail parameters
+ws_rail_clr    = 0.3;     // clearance between rail channel and PCB edge
+ws_rail_wall   = 1.5;     // rail outer wall thickness
+ws_rail_lip    = 2.5;     // inward lip width that captures PCB edge
+ws_rail_h      = 3.0;     // rail height below lid (total channel depth)
+ws_pcb_t       = 1.6;     // PCB thickness (channel slots PCB into this layer)
+ws_rail_chan_h  = ws_pcb_t + 0.4;  // channel slot height (PCB + clearance)
 
-// PCB pocket on lid underside — walls on long sides, open on short ends.
-ws_pocket_clr  = 0.3;     // clearance between pocket wall and PCB edge
-ws_pocket_wall = 1.5;     // pocket side wall thickness
-ws_pocket_h    = ws_boss_h;  // pocket depth = boss height (PCB sits on bosses)
+// Stop wall at back end (high-Y) prevents over-insertion
+ws_stop_wall   = 1.5;     // stop wall thickness
+
+// Detent bump near entry for friction retention
+ws_detent_h    = 0.4;     // bump height into channel
+ws_detent_w    = 8.0;     // bump width along rail
+ws_detent_pos  = 10.0;    // distance from entry end (low-Y PCB edge)
 
 // Active area window (cut all the way through for the screen)
 ws_win_margin  = 1.0;     // margin around active area
@@ -115,12 +122,13 @@ difference() {
     union() {
         top_plate();
         lid_lip();
-        display_pocket();
-        display_mount_bosses();
+        display_slide_rails();
+        display_stop_wall();
+        display_detent_bumps();
     }
     body_corner_clearances();
     display_window();
-    display_screw_holes();
+    display_rail_channels();
 }
 
 // Uncomment to visualize display placement before printing:
@@ -135,9 +143,7 @@ module top_plate() {
 }
 
 // Downward lip that slots inside the body's interior walls and rests on the
-// top face of the perimeter snap ledge. In assembled Z-coords, the lid
-// top-plate bottom face lands at Z = enc_h and the lip bottom at
-// Z = enc_h - lip_h = 43.5, which equals the body's ledge top.
+// top face of the perimeter snap ledge.
 module lid_lip() {
     lip_outer_w = interior_w - 2*lip_clr;
     lip_outer_d = interior_d - 2*lip_clr;
@@ -160,40 +166,87 @@ module body_corner_clearances() {
     }
 }
 
-// PCB pocket: U-channel on the lid underside. Two walls on the long (X)
-// sides locate the PCB in Y. Both short (Y) ends are open for cables.
-module display_pocket() {
-    pocket_inner_w = ws_pcb_w + 2*ws_pocket_clr;
-    pocket_inner_d = ws_pcb_d + 2*ws_pocket_clr;
+// Slide-in rails: two solid bars on the long (X) sides of the display area.
+// Each rail runs the full PCB length plus stop wall. The inward lip that
+// captures the PCB edge is cut out by display_rail_channels() below.
+module display_slide_rails() {
+    rail_len = ws_pcb_w + 2*ws_rail_clr + ws_stop_wall;
 
-    // Two long-side walls only (no walls on the short/cable ends)
     for (side = [0, 1]) {
         y_off = (side == 0)
-            ? ws_pcb_origin_y - ws_pocket_clr - ws_pocket_wall
-            : ws_pcb_origin_y + ws_pcb_d + ws_pocket_clr;
-        translate([ws_pcb_origin_x - ws_pocket_clr - ws_pocket_wall,
+            ? ws_pcb_origin_y - ws_rail_clr - ws_rail_wall
+            : ws_pcb_origin_y + ws_pcb_d + ws_rail_clr;
+        translate([ws_pcb_origin_x - ws_rail_clr,
                    y_off,
-                   -ws_pocket_h])
-            cube([pocket_inner_w + 2*ws_pocket_wall,
-                  ws_pocket_wall,
-                  ws_pocket_h + 0.01]);
+                   -ws_rail_h])
+            cube([rail_len,
+                  ws_rail_wall,
+                  ws_rail_h + 0.01]);
+
+        // Inward lip — extends from the rail wall toward PCB center
+        translate([ws_pcb_origin_x - ws_rail_clr,
+                   (side == 0)
+                       ? ws_pcb_origin_y - ws_rail_clr
+                       : ws_pcb_origin_y + ws_pcb_d + ws_rail_clr - ws_rail_lip,
+                   -ws_rail_h])
+            cube([rail_len,
+                  ws_rail_lip,
+                  ws_rail_h + 0.01]);
     }
 }
 
-// Four bosses inside the pocket at the factory mounting hole positions.
-// The PCB rests on these. Connected to the lid plate above.
-module display_mount_bosses() {
-    for (hx = [ws_hole_inset, ws_hole_inset + ws_hole_cx],
-         hy = [ws_hole_inset, ws_hole_inset + ws_hole_cy]) {
-        translate([ws_pcb_origin_x + hx,
-                   ws_pcb_origin_y + hy,
-                   -ws_boss_h])
-            cylinder(d=ws_boss_od, h=ws_boss_h + 0.01);
+// Channel slots cut into the rails — the PCB edges slide through here.
+// The channel is at the top of the rail (against the lid underside) so the
+// PCB hangs at the correct depth. Below the channel, the lip supports the PCB.
+module display_rail_channels() {
+    // Channel runs the full rail length minus the stop wall
+    chan_len = ws_pcb_w + 2*ws_rail_clr + 0.2;
+
+    for (side = [0, 1]) {
+        y_off = (side == 0)
+            ? ws_pcb_origin_y - ws_rail_clr
+            : ws_pcb_origin_y + ws_pcb_d + ws_rail_clr - ws_rail_lip;
+        translate([ws_pcb_origin_x - ws_rail_clr - 0.1,
+                   y_off,
+                   -ws_rail_chan_h])
+            cube([chan_len,
+                  ws_rail_lip + 0.1,
+                  ws_rail_chan_h + 0.01]);
     }
 }
 
-// Active area window — cuts through the lid plate only (the pocket
-// walls and bosses are outside the active area so they stay intact).
+// Stop wall at the back short end (high-X) prevents over-insertion.
+// The display slides in from the front (low-X) end.
+module display_stop_wall() {
+    stop_x = ws_pcb_origin_x + ws_pcb_w + ws_rail_clr;
+    translate([stop_x,
+               ws_pcb_origin_y - ws_rail_clr - ws_rail_wall,
+               -ws_rail_h])
+        cube([ws_stop_wall,
+              ws_pcb_d + 2*ws_rail_clr + 2*ws_rail_wall,
+              ws_rail_h + 0.01]);
+}
+
+// Small detent bumps on each rail's inner lip near the entry end.
+// These provide friction retention so the display doesn't slide out.
+module display_detent_bumps() {
+    for (side = [0, 1]) {
+        y_pos = (side == 0)
+            ? ws_pcb_origin_y - ws_rail_clr + 0.1
+            : ws_pcb_origin_y + ws_pcb_d + ws_rail_clr - 0.1;
+        // Bump sits inside the channel, protruding inward
+        translate([ws_pcb_origin_x + ws_detent_pos,
+                   y_pos,
+                   -ws_rail_chan_h/2])
+            rotate([0, 0, 0])
+            scale([1, (side == 0) ? -1 : 1, 1])
+            // Half-cylinder bump
+            rotate([0, 90, 0])
+            cylinder(d=ws_detent_h*2, h=ws_detent_w, $fn=20);
+    }
+}
+
+// Active area window — cuts through the lid plate.
 module display_window() {
     win_cx = ws_pcb_origin_x + ws_active_off_x + ws_active_w/2;
     win_cy = ws_pcb_origin_y + ws_active_off_y + ws_active_d/2;
@@ -203,54 +256,40 @@ module display_window() {
         cube([ws_win_w, ws_win_d, lid_t + 0.2]);
 }
 
-// M2 pilot holes through the bosses and lid plate for self-tapping screws.
-module display_screw_holes() {
-    for (hx = [ws_hole_inset, ws_hole_inset + ws_hole_cx],
-         hy = [ws_hole_inset, ws_hole_inset + ws_hole_cy]) {
-        translate([ws_pcb_origin_x + hx,
-                   ws_pcb_origin_y + hy,
-                   -ws_boss_h - 0.1])
-            cylinder(d=ws_m2_tap_d, h=ws_boss_h + lid_t + 0.2);
-    }
-}
-
 // =============================================================================
 // PREVIEW (display placement sanity check)
 // =============================================================================
 
 module preview_waveshare() {
-    // PCB (dark blue) — hangs below the lid plate
+    // PCB (dark blue) — hangs below the lid plate in the rail channels
     color("navy", 0.5)
-    translate([ws_pcb_origin_x, ws_pcb_origin_y, -8.80])
-        cube([ws_pcb_w, ws_pcb_d, 1.6]);
+    translate([ws_pcb_origin_x, ws_pcb_origin_y, -ws_pcb_t])
+        cube([ws_pcb_w, ws_pcb_d, ws_pcb_t]);
 
     // LCD back stack (grey translucent)
     color("grey", 0.4)
-    translate([ws_pcb_origin_x, ws_pcb_origin_y, -8.80 + 1.6])
-        cube([ws_pcb_w, ws_pcb_d, 8.80 - 1.6 - 0.5]);
+    translate([ws_pcb_origin_x, ws_pcb_origin_y, -8.80])
+        cube([ws_pcb_w, ws_pcb_d, 8.80 - ws_pcb_t - 0.5]);
 
-    // Glass (cyan translucent) — pokes up through the lid cutout, ~4 mm
-    // above the lid top surface (retained by the bezel above it).
+    // Glass (cyan translucent)
     color("cyan", 0.35)
     translate([ws_pcb_origin_x - (ws_glass_w - ws_pcb_w)/2,
                ws_pcb_origin_y + (ws_pcb_d - ws_glass_d)/2,
                lid_t - 0.1])
         cube([ws_glass_w, ws_glass_d, 0.6]);
 
-    // Active area (green) — verify asymmetry relative to the PCB/cutout
+    // Active area (green)
     color("lime", 0.7)
     translate([ws_pcb_origin_x + ws_active_off_x,
                ws_pcb_origin_y + ws_active_off_y,
                lid_t + 0.5])
         cube([ws_active_w, ws_active_d, 0.3]);
 
-    // Factory mounting holes (yellow dots) — documentation only
-    color("yellow")
-    for (hx = [ws_hole_inset, ws_hole_inset + ws_hole_cx],
-         hy = [ws_hole_inset, ws_hole_inset + ws_hole_cy]) {
-        translate([ws_pcb_origin_x + hx, ws_pcb_origin_y + hy, -8.80])
-            cylinder(d=ws_hole_measured_d, h=2);
-    }
+    // Slide direction arrow (red) — shows insertion direction
+    color("red", 0.8)
+    translate([ws_pcb_origin_x - 15, ws_pcb_origin_y + ws_pcb_d/2, -ws_pcb_t/2])
+        rotate([0, 90, 0])
+        cylinder(d=2, h=12, $fn=12);
 }
 
 // =============================================================================
@@ -258,13 +297,14 @@ module preview_waveshare() {
 // =============================================================================
 
 echo("==========================================================");
-echo("DOA FLAT ENCLOSURE - LID");
+echo("DOA FLAT ENCLOSURE - LID (SLIDE-IN)");
 echo("==========================================================");
 echo(str("Lid outer: ", enc_w, " x ", enc_d, " x ", lid_t, " mm"));
 echo(str("Lip drop: ", lip_h, " mm (seats on body ledge)"));
 echo(str("Display window: ", ws_win_w, " x ", ws_win_d,
     " mm (active area + ", ws_win_margin, " mm margin)"));
-echo(str("PCB pocket: walls on long sides, open on short ends, depth=",
-    ws_pocket_h, " mm"));
-echo(str("Display bosses: 4x M2, OD=", ws_boss_od, " mm, height=",
-    ws_boss_h, " mm, pilot=", ws_m2_tap_d, " mm"));
+echo(str("Slide rails: lip=", ws_rail_lip, " mm, channel=",
+    ws_rail_chan_h, " mm (PCB ", ws_pcb_t, " + 0.4 clr)"));
+echo(str("Stop wall: ", ws_stop_wall, " mm at high-X end"));
+echo(str("Detent bumps: ", ws_detent_h, " mm x ", ws_detent_w,
+    " mm, ", ws_detent_pos, " mm from entry"));

@@ -28,8 +28,10 @@ Date: 2026
 
 import numpy as np
 import argparse
+import json
 import sys
 import time
+from pathlib import Path
 from typing import Tuple
 from enum import Enum
 
@@ -74,9 +76,18 @@ class EstimationConfig:
     
     # Algorithm
     ALGORITHM = "ROOTMUSIC"   # Default algorithm
-    
+
     # MUSIC specific
     MUSIC_SPECTRUM_POINTS = 181  # 0-180 degrees
+
+    # Filtering (matches GRC flowgraph band_pass_filter settings)
+    FILTER_TYPE = "none"          # "none", "bandpass", or "lowpass"
+    TONE_FREQ = 50e3              # Bandpass center (Hz) — GRC default
+    BPF_HALF_BW = 10e3            # Bandpass half-bandwidth (Hz)
+    LPF_CUTOFF = 50e3             # Lowpass cutoff (Hz)
+    FILTER_TRANSITION = 5e3       # Transition bandwidth (Hz)
+    FILTER_NUM_TAPS = 201         # FIR filter length
+    FILTER_METHOD = "fft"         # "fft" or "timedomain"
     
     @classmethod
     def from_args(cls, args):
@@ -93,6 +104,14 @@ class EstimationConfig:
             cls.SNAPSHOT_SIZE = int(args.snapshot_size)
         if args.single:
             cls.CONTINUOUS = False
+        if hasattr(args, 'filter') and args.filter:
+            cls.FILTER_TYPE = args.filter.lower()
+        if hasattr(args, 'tone_freq') and args.tone_freq is not None:
+            cls.TONE_FREQ = float(args.tone_freq)
+        if hasattr(args, 'lpf_cutoff') and args.lpf_cutoff is not None:
+            cls.LPF_CUTOFF = float(args.lpf_cutoff)
+        if hasattr(args, 'filter_method') and args.filter_method:
+            cls.FILTER_METHOD = args.filter_method.lower()
         return cls
 
 
@@ -101,6 +120,62 @@ class Algorithm(Enum):
     MUSIC = "MUSIC"
     ROOTMUSIC = "ROOTMUSIC"
     MVDR = "MVDR"
+
+
+# =============================================================================
+# FIR Filter Design (NumPy only — no scipy on Cora)
+# =============================================================================
+
+def _sinc_lowpass(cutoff_hz: float, fs: float, num_taps: int) -> np.ndarray:
+    """Design a lowpass FIR filter using windowed sinc method."""
+    fc = cutoff_hz / fs  # normalized cutoff
+    n = np.arange(num_taps)
+    mid = (num_taps - 1) / 2.0
+    h = np.sinc(2 * fc * (n - mid))  # ideal lowpass impulse response
+    h *= np.hamming(num_taps)         # apply Hamming window
+    h /= np.sum(h)                    # normalize to unity gain
+    return h
+
+
+def design_filter(config) -> np.ndarray | None:
+    """Design FIR filter taps based on config. Returns None if no filtering."""
+    if config.FILTER_TYPE == "none":
+        return None
+
+    fs = config.SAMPLE_RATE
+    N = config.FILTER_NUM_TAPS
+
+    if config.FILTER_TYPE == "lowpass":
+        taps = _sinc_lowpass(config.LPF_CUTOFF, fs, N)
+    elif config.FILTER_TYPE == "bandpass":
+        # Bandpass = lowpass(f_high) - lowpass(f_low)
+        f_low = config.TONE_FREQ - config.BPF_HALF_BW
+        f_high = config.TONE_FREQ + config.BPF_HALF_BW
+        lp_high = _sinc_lowpass(f_high, fs, N)
+        lp_low = _sinc_lowpass(f_low, fs, N)
+        taps = lp_high - lp_low
+        # Re-normalize peak to 1
+        taps /= np.max(np.abs(np.fft.fft(taps)))
+    else:
+        return None
+
+    return taps
+
+
+def apply_filter_timedomain(signal: np.ndarray, taps: np.ndarray) -> np.ndarray:
+    """Apply FIR filter via time-domain convolution (simple, slower)."""
+    return np.convolve(signal, taps, mode='same')
+
+
+def apply_filter_fft(signal: np.ndarray, taps: np.ndarray) -> np.ndarray:
+    """Apply FIR filter via FFT convolution (much faster on Cortex-A9)."""
+    n = len(signal) + len(taps) - 1
+    nfft = 1
+    while nfft < n:
+        nfft <<= 1
+    result = np.fft.ifft(np.fft.fft(signal, nfft) * np.fft.fft(taps, nfft))
+    start = (len(taps) - 1) // 2
+    return result[start:start + len(signal)]
 
 
 # =============================================================================
@@ -482,21 +557,49 @@ def run_estimation(config: EstimationConfig):
         estimator.cleanup()
         return
     
+    cal_file = Path(__file__).parent / "data" / "calibration.json"
+
+    # Design filter once (taps are reused every iteration)
+    fir_taps = design_filter(config)
+    if fir_taps is not None:
+        apply_filter = apply_filter_fft if config.FILTER_METHOD == "fft" else apply_filter_timedomain
+        print(f"# Filter: {config.FILTER_TYPE} ({len(fir_taps)} taps, {config.FILTER_METHOD})")
+    else:
+        apply_filter = None
+        print(f"# Filter: none")
+
     print(f"# Algorithm: {algorithm.value}")
     print(f"# Calibration: {config.PHASE_CAL_DEG}°")
-    
+
     samples_per_update = int(config.SNAPSHOT_SIZE * config.NUM_SNAPSHOTS)
-    
+    current_cal = config.PHASE_CAL_DEG
+
     try:
         iteration = 0
         while True:
             start_time = time.time()
-            
+
+            # Hot-reload calibration from file every iteration
+            try:
+                with open(cal_file) as f:
+                    cal_data = json.load(f)
+                new_cal = cal_data.get("phase_offset_deg", current_cal)
+                if new_cal != current_cal:
+                    print(f"# Calibration updated: {current_cal:.2f}° → {new_cal:.2f}°")
+                    current_cal = new_cal
+            except (FileNotFoundError, json.JSONDecodeError):
+                pass
+
             # Read samples
             ch0, ch1 = estimator.read_samples(samples_per_update)
-            
+
+            # Apply FIR filter (bandpass or lowpass) to both channels
+            if apply_filter is not None:
+                ch0 = apply_filter(ch0, fir_taps)
+                ch1 = apply_filter(ch1, fir_taps)
+
             # Apply calibration
-            ch1_cal = apply_calibration(ch1, config.PHASE_CAL_DEG)
+            ch1_cal = apply_calibration(ch1, current_cal)
             
             # Estimate DoA based on selected algorithm
             if algorithm == Algorithm.PHASEDIFF:
@@ -556,6 +659,16 @@ def main():
                         help="Samples per covariance snapshot")
     parser.add_argument("--single", action="store_true",
                         help="Single estimate then exit")
+    parser.add_argument("--filter", type=str, default="none",
+                        choices=["none", "bandpass", "lowpass"],
+                        help="FIR filter type (default: none)")
+    parser.add_argument("--tone-freq", type=float, dest="tone_freq",
+                        help="Bandpass center frequency in Hz (default: 50000)")
+    parser.add_argument("--lpf-cutoff", type=float, dest="lpf_cutoff",
+                        help="Lowpass cutoff frequency in Hz (default: 50000)")
+    parser.add_argument("--filter-method", type=str, dest="filter_method",
+                        default="fft", choices=["fft", "timedomain"],
+                        help="Filter implementation: fft (fast) or timedomain (slow, for comparison)")
     
     args = parser.parse_args()
     config = EstimationConfig.from_args(args)

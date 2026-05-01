@@ -2,13 +2,12 @@
 
 **Portable, real-time DoA estimation using a 2-element antenna array on an embedded FPGA platform**
 
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
-[![GNU Radio 3.10](https://img.shields.io/badge/GNU%20Radio-3.10-green.svg)](https://www.gnuradio.org/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
 
-This thesis project implements a portable Direction of Arrival (DoA) estimation system at 2.4 GHz. A **Digilent Cora Z7** (Zynq-7000 SoC) runs PetaLinux with GNU Radio and custom DoA algorithms, receiving coherent IQ data from a **BladeRF 2.0 xA4** two-channel SDR. The system is self-contained in a battery-powered enclosure with a touchscreen display and web-based control interface.
+This thesis project implements a portable Direction-of-Arrival (DoA) estimation system at 2.4 GHz. A two-channel coherent SDR (BladeRF 2.0 xA4) feeds an FPGA SoC that runs the cross-correlation pipeline in fabric and root-MUSIC on the application processor. The system is bench-portable: a barrel-jack-powered SDR, two λ/2-spaced whip antennas, an nRF5340 signal source, and a single Ethernet link to a host PC.
 
 Four DoA algorithms are implemented:
 - **Root-MUSIC** (default) — polynomial root finding, fast and accurate
@@ -18,149 +17,152 @@ Four DoA algorithms are implemented:
 
 Based on: Wachowiak & Kryszkiewicz (2022) — *"Angle of arrival estimation in a multi-antenna software defined radio system"*
 
+## Current Platform Status
+
+| Platform | Role | Branch / state |
+| --- | --- | --- |
+| **AMD Kria KV260** (Zynq UltraScale+ K26, Ubuntu 22.04 aarch64) | **Primary** — active thesis development, current capture campaigns | `main` |
+| **Digilent Cora Z7** (Zynq-7000, PetaLinux 2025.2) | **Validated reference** — end-to-end pipeline + display, frozen | `feature/fir-backpressure` (frozen, not merged) |
+
+The two platforms run the **same `doa_pipeline` RTL** (FIR + phase-cal rotation + cross-correlation + autocorrelation accumulators) and the same root-MUSIC implementation, with platform-specific transports for AXI register I/O and DMA.
+
+### Why two platforms?
+
+The thesis began on the Cora Z7. The Cora pipeline reached an end-to-end validated state on the `feature/fir-backpressure` branch (RTL + GNU Radio + headless driver + touch display), but PetaLinux 2025.2 ships with a confirmed upstream regression in chipidea USB binding (AMD answer record [AR#000039143](https://adaptivesupport.amd.com/), all-platforms, fix ETA 2026.1) that breaks BladeRF USB enumeration on any rebuilt `image.ub`. Each RTL or driver iteration past that point would have required either rolling forward onto a broken USB stack or freezing on a stale pre-rebuild image. The KV260 (Kria K26 SOM, Ubuntu 22.04 aarch64) sidesteps PetaLinux entirely and bypasses the bug, so live thesis development moved there. The Cora reference branch remains in this repo as a validated baseline; current capture campaigns run on the KV260.
+
 ## Hardware
 
 | Component | Model | Purpose |
 |-----------|-------|---------|
-| FPGA SoC | Digilent Cora Z7 (Zynq-7000) | Runs PetaLinux + GNU Radio headlessly |
-| SDR | Nuand BladeRF 2.0 xA4 | 2-channel coherent receiver |
-| Antennas | 2x Linx ANT-2.4-CW-RCL | Half-wavelength spaced ULA (61.2 mm) |
-| Display | Waveshare ESP32-S3 4.3" Touch LCD | LVGL touch UI via UART |
-| Signal source | nRF5340 DK | Zephyr radio_test at 2.418 GHz |
-| Power | TalentCell LiFePO4 12.8V + DC-DC buck | Portable battery operation |
+| FPGA SoC (primary) | AMD Kria KV260 starter kit (K26 SOM, ZU+ MPSoC) | Live thesis platform — Ubuntu + headless NumPy driver |
+| FPGA SoC (reference) | Digilent Cora Z7 (Zynq-7000) | Frozen end-to-end reference — PetaLinux + GNU Radio |
+| SDR | Nuand BladeRF 2.0 xA4 | 2-channel coherent receiver, 1 MS/s |
+| Antennas | 2× Linx ANT-2.4-CW-RCL whips | Half-wavelength ULA (61.2 mm) |
+| Signal source | nRF5340 DK (Zephyr `radio_test`) | 2.419 GHz GFSK / modulated carrier |
+| Display (Cora-era, optional) | Waveshare ESP32-S3 4.3" Touch LCD | LVGL touch UI via UART |
+| Power | TalentCell LiFePO4 12.8 V + DC-DC buck (Cora bench); BladeRF barrel jack 5 V/2 A | |
 
 See [docs/HARDWARE_DETAILS.md](docs/HARDWARE_DETAILS.md) for enclosure dimensions and wiring.
 
 ## RF Parameters
 
-| Parameter | Value |
-|-----------|-------|
-| Center frequency | 2.412–2.484 GHz (WiFi Ch 1–14) |
+| Parameter | Current campaign value |
+|-----------|------------------------|
+| Center frequency | 2.41895 GHz (nRF ch 19 = 2.419 GHz, off-tuned 50 kHz) |
 | Sample rate | 1 MS/s |
 | RX bandwidth | 1 MHz |
-| Antenna spacing | 61.2 mm (lambda/2 at 2.45 GHz) |
+| Antenna spacing | 61.2 mm (λ/2 at 2.45 GHz) |
 | Array type | 2-element Uniform Linear Array |
-
-## User Interfaces
-
-**Web Dashboard** (primary) — Connect a browser to `http://<cora-ip>:8080` for real-time DoA control with SVG gauge, algorithm selection, calibration, and live console.
-
-**Touch Display** — Waveshare ESP32-S3 with LVGL arc gauge and algorithm selector, communicating via UART.
+| BladeRF gain | 50 dB |
 
 ## Repository Structure
 
 ```
-doa_24ghz_thesis/
-├── cora_headless/             # Headless system deployed on Cora Z7
-│   ├── web_dashboard.py       #   Web UI (HTTP + SSE, zero dependencies)
-│   ├── main.py                #   UART display controller
-│   ├── aoa_estimation_headless.py    # DoA algorithms (SoapySDR + NumPy)
-│   ├── phase_calibration_headless.py # Wired phase calibration
-│   ├── display_firmware/      #   ESP32 LVGL touch display firmware
-│   ├── initd/                 #   SysVinit auto-start script
-│   └── udev/                  #   USB permission rules
-├── gnuradio_flowgraphs/       # GNU Radio Companion flowgraphs
-│   ├── aoa_estimation_bladerf.grc          # Real-time DoA (Qt GUI)
-│   ├── phase_calibration_bladerf.grc       # Phase calibration (Qt GUI)
-│   └── channel_sweep_bladerf.grc           # WiFi channel sweep (Qt GUI)
-├── scripts/
-│   ├── sweep_channels.py      # WiFi ch 1-14 sweep characterization
-│   ├── collect_dataset.py     # HDF5 data collection (offline)
-│   ├── analyze_dataset.py     # Post-processing pipeline (offline)
-│   └── ...                    # Setup and utility scripts
-├── src/doa24/                 # Python analysis package (offline use)
-├── hardware/                  # 3D-printed enclosure (OpenSCAD + STL)
-├── docs/                      # Design docs, wiring, changelog
-├── configs/                   # Experiment/receiver YAML configs
-└── fpga/                      # Future FPGA acceleration notes
+doa_24ghz_t/
+├── kv260_headless/             # KV260 driver path (PRIMARY)
+│   ├── aoa_estimation_fpga_kv260.py   # NumPy + SoapySDR DoA driver
+│   ├── aoa_estimation_headless.py     # ARM-only path (no FPGA accel)
+│   ├── phase_calibration_headless.py  # Wired phase calibration
+│   ├── emio_probe.py                  # EMIO GPIO bring-up check
+│   ├── dma_probe.py                   # AXI-DMA state dump
+│   └── ...
+├── cora_headless/              # Cora Z7 driver (frozen reference)
+│   ├── aoa_estimation_fpga_v2.py      # FPGA-accelerated DoA
+│   ├── aoa_estimation_headless.py     # ARM-only baseline
+│   ├── main.py                        # UART display controller
+│   ├── web_dashboard.py               # HTTP + SSE web UI
+│   ├── display_firmware/              # ESP32 LVGL touch display
+│   └── initd/                         # SysVinit auto-start
+├── fpga/
+│   ├── rtl/                    # doa_pipeline + dma_safe_ctrl + supporting IP
+│   ├── vivado_kv260/           # KV260 block design + constraints
+│   ├── tb/                     # iverilog testbenches
+│   └── GETTING_STARTED.md      # Vivado build flow
+├── gnuradio_flowgraphs/        # Cora-era GRC flowgraphs (reference)
+├── scripts/                    # Campaign automation, analysis, deploy
+├── data/                       # Capture sessions (runA … runE, baselines)
+├── results/                    # Campaign analysis outputs (plots, CSVs, fits)
+├── hardware/                   # 3D-printed enclosure (OpenSCAD + STL)
+└── docs/                       # Specs, thesis chapter sources, hardware details
 ```
 
-## Quick Start
-
-### On Cora Z7 (deployed system)
+## Quick Start (KV260 — primary path)
 
 ```bash
-# Deploy scripts from host PC
-scp cora_headless/*.py petalinux@192.168.1.100:/home/petalinux/doa/
+# 1. Bring up bitstream + udmabuf + EMIO gates (idempotent)
+ssh ubuntu@<kv260-ip> 'sudo bash ~/doa/bench_bringup.sh'
 
-# Start web dashboard
-ssh petalinux@192.168.1.100 "python3 /home/petalinux/doa/web_dashboard.py &"
+# 2. Run a capture (60 s, root-MUSIC, unfiltered, ch 19 + 50 kHz off-tune)
+ssh ubuntu@<kv260-ip> 'sudo python3 ~/doa/aoa_estimation_fpga_kv260.py \
+    --filter none --algo rootmusic --freq 2.418e9 --gain 50'
 
-# Open browser to http://192.168.1.100:8080
+# 3. Per-angle protocol (label captures by angle for the campaign)
+ssh ubuntu@<kv260-ip> 'echo "50deg" > ~/doa/data/current_label.txt'
+# … repeat capture for next angle …
 ```
 
-See [docs/DEMO_QUICKSTART.md](docs/DEMO_QUICKSTART.md) for the full demo procedure.
+Per-capture CSV + JSON sidecar lands under `~/doa/data/aoa_<LABEL>_<MODE>_<ALGO>_<TS>.csv`. See [docs/DEMO_QUICKSTART.md](docs/DEMO_QUICKSTART.md) for the full bench protocol.
 
-### On host PC (simulation, no hardware needed)
+## Quick Start (Cora Z7 — reference)
+
+The Cora reference path lives on the `feature/fir-backpressure` branch (frozen, not merged into `main`):
 
 ```bash
-git clone https://github.com/slopy1/doa_24ghz_t.git
-cd doa_24ghz_t
-pip install -r requirements.txt
-
-# Run channel sweep in simulation mode
-python scripts/sweep_channels.py --true-angle 90 --channels 1 6 11
-
-# Open flowgraph in GNU Radio Companion
-gnuradio-companion gnuradio_flowgraphs/channel_sweep_bladerf.grc
+git fetch origin feature/fir-backpressure
+git checkout feature/fir-backpressure
+# Then deploy to petalinux@<cora-ip>:/home/petalinux/doa/ per cora_headless/README
 ```
 
-## WiFi Channel Sweep
-
-The sweep script characterizes DoA accuracy across the 2.4 GHz band:
-
-```bash
-# Full 14-channel sweep with known source angle
-python scripts/sweep_channels.py --true-angle 90 --cal -12.5
-
-# Quick test on common non-overlapping WiFi channels
-python scripts/sweep_channels.py --channels 1 6 11 --estimates 50 --true-angle 90
-```
-
-Outputs CSV data, comparison plots (mean AoA + std dev vs channel), and error analysis (MAE + RMSE) to `results/`.
+The Cora deployment includes a web dashboard (`http://<cora-ip>:8080`) and a touch display front-end. Live thesis development happens on `main` against the KV260 — this branch is preserved as the validated end-to-end baseline.
 
 ## Calibration
 
 Wired phase calibration using a signal source, attenuator, and power splitter:
 
 ```
-Signal Source (nRF5340 @ 2.418 GHz)
-    → VAT-30A+ 30 dB attenuator
+Signal Source (nRF5340 @ 2.419 GHz)
+    → 30 dB SMA attenuator
     → 2-way power splitter
-        → Matched cable → BladeRF RX1
-        → Matched cable → BladeRF RX2
+        → matched cable → BladeRF RX1
+        → matched cable → BladeRF RX2
 ```
 
-Run via web dashboard "Calibrate" button or directly:
 ```bash
-python cora_headless/phase_calibration_headless.py --freq 2.418e9 --duration 10
+# KV260
+sudo python3 ~/doa/phase_calibration_headless.py --freq 2.418e9 --duration 10
 ```
+
+The `--filter=none` calibration is filter-agnostic (broadband static phase offset), reusable across filter regimes.
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [CHANGELOG](docs/CHANGELOG.md) | All additions and changes |
-| [DEMO_QUICKSTART](docs/DEMO_QUICKSTART.md) | Step-by-step demo procedure |
-| [DEMO_COMMANDS](docs/DEMO_COMMANDS.txt) | Command reference for nRF + Cora |
+| [DEMO_QUICKSTART](docs/DEMO_QUICKSTART.md) | Step-by-step bench/demo procedure |
+| [DEMO_COMMANDS](docs/DEMO_COMMANDS.txt) | Command reference (nRF + driver) |
 | [HARDWARE_DETAILS](docs/HARDWARE_DETAILS.md) | Enclosure, components, power |
-| [BUILD_HISTORY](docs/BUILD_HISTORY.md) | Yocto/PetaLinux build errors and fixes |
-| [BOOT_AUTONOMY](docs/BOOT_AUTONOMY.md) | Auto-start and init script design |
-| [WIRING_DIAGRAM](cora_headless/docs/WIRING_DIAGRAM.md) | Electrical connections |
-| [ASSEMBLY](hardware/ASSEMBLY.md) | Enclosure assembly instructions |
-| [bibliography](docs/bibliography.md) | Academic references |
-| [fpga_mapping](docs/fpga_mapping.md) | Future FPGA acceleration design |
-| [INSTALL_GUIDE](INSTALL_GUIDE.md) | Host PC software setup |
+| [INSTALL_GUIDE](INSTALL_GUIDE.md) | Host PC + KV260 software setup |
+| [fpga/GETTING_STARTED](fpga/GETTING_STARTED.md) | Vivado build flow + register map |
+| [docs/specs/](docs/specs/) | Phase-by-phase RTL design specs |
 
-## PetaLinux / Yocto Build
+## FPGA Pipeline
 
-The Cora Z7 image is built with PetaLinux 2025.2 (Yocto Scarthgap). Custom recipes provide:
-- GNU Radio 3.10.12 (headless)
-- SoapySDR 0.8.1 + SoapyBladeRF 0.4.1
-- libbladeRF 2.6.0
-- gr-aoa 1.0.0 ([MarcinWachowiak/gr-aoa](https://github.com/MarcinWachowiak/gr-aoa))
+The `doa_pipeline` IP runs the per-snapshot signal processing in fabric:
 
-See [docs/BUILD_HISTORY.md](docs/BUILD_HISTORY.md) for the full build log and cross-compilation fixes.
+```
+BladeRF IQ stream → channel_splitter → fir_filter_sc16 → phase_rotate_sc16
+                                                              ↓
+                                       xcorr_acc + autocorr_acc (R00, R11)
+                                                              ↓
+                                                    AXI-Lite read-back
+```
+
+15 AXI-Lite registers, 48-bit accumulators read as LO/HI pairs. Same RTL on both targets, two transports:
+
+- **Cora Z7**: AXI-Lite at `0x4000_0000` via `/dev/mem` mapping; AXI-DMA on OCM (0xFFFC_0000) bypassing CMA
+- **KV260**: AXI-Lite at `0xA001_0000` via EMIO GPIO bit-banged register I/O (Path C); AXI-DMA on `S_AXI_HP0_FPD` with udmabuf-allocated CMA buffers
+
+The KV260 transport works around an AXI-Lite write-strobe stride bug observed on the Kria HPM0_FPD aperture — see [docs/specs/2026-04-22-kv260-plan-of-attack.md](docs/specs/2026-04-22-kv260-plan-of-attack.md) for the full debug arc.
 
 ## License
 

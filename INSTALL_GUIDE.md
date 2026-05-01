@@ -1,288 +1,185 @@
-# DoA Experiment Installation Guide
+# DoA-24GHz Installation Guide
 
-Complete setup instructions for running the 2.4 GHz Direction of Arrival experiment on a fresh Linux system.
+Two installation paths depending on what you're trying to do:
 
-## Hardware Requirements
+| Path | Audience | Hardware required |
+|------|----------|-------------------|
+| **A: Host PC** | Browse the repo, replay captured data, run offline analysis | None — pure Python |
+| **B: KV260 deployment** | Reproduce the live capture pipeline | KV260 + BladeRF 2.0 xA4 + 2× whip antennas + nRF5340 (or other 2.4 GHz tone source) |
 
-| Item | Model | Purpose |
-|------|-------|---------|
-| SDR | Nuand BladeRF 2.0 micro xA4 | 2-channel coherent receiver |
-| Antennas | 2× 2.4 GHz whip antennas | λ/2 spaced array (61mm) |
-| USB Cable | USB 3.0 Type-A to Micro-B | BladeRF connection |
-| **For Calibration:** | | |
-| Power Splitter | Mini-Circuits ZX10-2-42-S+ | Split calibration signal |
-| Attenuator | 30 dB SMA attenuator | Prevent RX overload |
-| SMA Cables | 2× matched-length cables | Phase-matched connections |
-| Transmitter | nRF52 or BladeRF TX | 2.44 GHz tone source |
+A Cora Z7 (frozen reference) path also exists on the `feature/fir-backpressure` branch — see the bottom of this document.
 
 ---
 
-## Software Requirements Summary
+## Path A: Host PC (offline analysis)
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| GNU Radio | 3.10+ | Signal processing framework |
-| BladeRF Driver | Latest | Hardware communication |
-| gr-aoa | Latest | MUSIC/Root-MUSIC blocks |
-| Python | 3.10+ | Scripting |
-| Eigen3 | 3.3+ | Linear algebra for MUSIC |
-| pybind11 | 2.0+ | Python bindings |
+For reading capture sessions, regenerating campaign plots, or browsing the codebase. No SDR or FPGA hardware needed.
 
----
+### Requirements
 
-## Installation Instructions
+- Python 3.10 or newer
+- A Linux, macOS, or Windows host with `pip`
 
-### For Arch Linux / Garuda / Manjaro
+### Install
 
 ```bash
-# 1. Install GNU Radio and BladeRF
-sudo pacman -S gnuradio gnuradio-companion gnuradio-osmosdr bladerf soapysdr soapysdr-bladerf
-
-# 2. Install build dependencies
-sudo pacman -S eigen3 pybind11 cmake base-devel git
-
-# 3. Install BladeRF Python bindings
-pip install "git+https://github.com/Nuand/bladeRF.git#subdirectory=host/libraries/libbladeRF_bindings/python"
-
-# 4. Clone and build gr-aoa
-cd ~
-git clone https://github.com/MarcinWachowiak/gr-aoa.git
-cd gr-aoa
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-sudo make install
-sudo ldconfig
-
-# 5. Link the Python module (if needed)
-sudo ln -sf /usr/local/lib/python3.*/site-packages/gnuradio/aoa /usr/lib/python3.*/site-packages/gnuradio/aoa
-
-# 6. Install Python dependencies
-pip install numpy scipy matplotlib h5py
-```
-
-### For Ubuntu 22.04 / 24.04 / Debian
-
-```bash
-# 1. Install GNU Radio and BladeRF
-sudo apt update
-sudo apt install gnuradio gnuradio-dev gr-osmosdr bladerf libbladerf-dev bladerf-fpga-hostedx40
-
-# 2. Install build dependencies
-sudo apt install libeigen3-dev pybind11-dev cmake build-essential git python3-pip
-
-# 3. Install SoapySDR BladeRF support
-sudo apt install soapysdr-module-bladerf
-
-# 4. Install BladeRF Python bindings
-pip3 install "git+https://github.com/Nuand/bladeRF.git#subdirectory=host/libraries/libbladeRF_bindings/python"
-
-# 5. Clone and build gr-aoa
-cd ~
-git clone https://github.com/MarcinWachowiak/gr-aoa.git
-cd gr-aoa
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-sudo make install
-sudo ldconfig
-
-# 6. Install Python dependencies
-pip3 install numpy scipy matplotlib h5py
-```
-
-### For Fedora
-
-```bash
-# 1. Install GNU Radio and BladeRF
-sudo dnf install gnuradio gnuradio-devel gr-osmosdr bladeRF bladeRF-devel
-
-# 2. Install build dependencies
-sudo dnf install eigen3-devel pybind11-devel cmake gcc-c++ git python3-pip
-
-# 3. Install BladeRF Python bindings
-pip3 install "git+https://github.com/Nuand/bladeRF.git#subdirectory=host/libraries/libbladeRF_bindings/python"
-
-# 4. Clone and build gr-aoa
-cd ~
-git clone https://github.com/MarcinWachowiak/gr-aoa.git
-cd gr-aoa
-mkdir build && cd build
-cmake ..
-make -j$(nproc)
-sudo make install
-sudo ldconfig
-
-# 5. Install Python dependencies
-pip3 install numpy scipy matplotlib h5py
-```
-
----
-
-## USB Permissions (All Distros)
-
-If BladeRF isn't detected without sudo, add udev rules:
-
-```bash
-# Create udev rule
-sudo tee /etc/udev/rules.d/88-bladerf.rules << 'EOF'
-# Nuand BladeRF 2.0
-ATTR{idVendor}=="2cf0", ATTR{idProduct}=="5250", MODE="0666", GROUP="plugdev"
-EOF
-
-# Reload rules
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-
-# Add user to plugdev group
-sudo usermod -aG plugdev $USER
-
-# Log out and back in for group changes to take effect
-```
-
----
-
-## Verify Installation
-
-```bash
-# 1. Check BladeRF connection
-bladeRF-cli -p
-# Should show: "Nuand bladeRF 2.0"
-
-# 2. Check GNU Radio
-gnuradio-config-info --version
-# Should show: 3.10.x or higher
-
-# 3. Check gr-aoa blocks
-gnuradio-companion
-# In GRC, search for "aoa" - should show:
-#   - MUSIC Linear Array
-#   - Root MUSIC Linear Array
-#   - Shift Phase
-#   - Correlate
-#   - Calculate Phase Difference
-
-# 4. Check Python BladeRF
-python3 -c "from bladerf import _bladerf; print('BladeRF Python OK')"
-```
-
----
-
-## Copy Project Files
-
-Copy these files from your main laptop:
-
-```
-doa_24ghz_thesis/
-├── gnuradio_flowgraphs/
-│   ├── phase_calibration_bladerf.grc    # Phase calibration
-│   └── aoa_estimation_bladerf.grc       # AoA estimation
-├── scripts/
-│   ├── transmit_tone.py                 # TX script
-│   └── collect_dataset.py               # Data collection
-├── src/
-│   └── doa24/                           # Python library
-├── configs/
-│   └── receiver.yaml                    # Settings
-└── requirements.txt                     # Python deps
-```
-
-Or clone from git if you've pushed to a repository:
-```bash
-git clone https://github.com/YOUR_USERNAME/doa_24ghz_thesis.git
-cd doa_24ghz_thesis
+git clone https://github.com/slopy1/doa_24ghz_t.git
+cd doa_24ghz_t
 pip install -r requirements.txt
 ```
 
----
-
-## Quick Test (No Transmitter Needed)
-
-To verify the setup works without a TX signal:
+### Sanity check
 
 ```bash
-# Open the calibration flowgraph
-gnuradio-companion /path/to/doa_24ghz_thesis/gnuradio_flowgraphs/phase_calibration_bladerf.grc
+# Re-render an existing campaign's plots from CSV/JSON
+python3 scripts/analyze_campaign.py --campaign-dir results/campaign_20260429_203028_v2/
 ```
 
-Run the flowgraph - you should see:
-- Spectrum display (will show noise floor)
-- Phase display (will show random values without signal)
-
-If you see the GUI with live plots, the setup is working!
+If the script runs without import errors and writes PNGs, your environment is ready.
 
 ---
 
-## Demo Workflow for Professor
+## Path B: KV260 deployment (live capture)
 
-### Preparation (Before Demo)
-1. Install all software (above)
-2. Let BladeRF warm up 30 minutes
-3. Do wired calibration, record phase offset
+Reproduces the live thesis pipeline. Tested on Ubuntu 22.04 LTS for AMD/Xilinx Kria (`xilinx-zynqmp-common-20232-*` images and Canonical's official Kria image).
 
-### Live Demo
-1. **Show hardware setup:** BladeRF + 2 antennas at λ/2 spacing
-2. **Start TX:** Position transmitter at known angle
-3. **Run AoA flowgraph:**
-   ```bash
-   gnuradio-companion gnuradio_flowgraphs/aoa_estimation_bladerf.grc
-   ```
-4. **Show results:**
-   - AoA estimate matches TX position
-   - Move TX, show angle changes
-   - MUSIC pseudo-spectrum shows peak at correct angle
+### Hardware checklist
 
-### Talking Points
-- "Using Root-MUSIC algorithm from Wachowiak paper"
-- "2-element array with λ/2 spacing at 2.4 GHz"
-- "Phase calibration compensates for hardware offsets"
-- "Band-pass filter rejects WiFi interference"
+| Item | Notes |
+|------|-------|
+| AMD Kria KV260 vision starter kit | K26 SOM, included KV260 carrier card |
+| BladeRF 2.0 xA4 | **Barrel-jack 5 V/2 A required** before USB (USB 5 V is insufficient at full RF power) |
+| USB 3.0 cable | Type-A to Type-B Micro |
+| 2× 2.4 GHz whip antennas | λ/2-spaced (61.2 mm), SMA |
+| 2× matched SMA cables, 1× 30 dB attenuator, 1× 2-way splitter | For wired phase calibration |
+| nRF5340 DK (or any tunable 2.4 GHz CW source) | Zephyr `radio_test` ch 19 = 2.419 GHz |
+
+### 1. System packages (KV260, Ubuntu 22.04 aarch64)
+
+```bash
+sudo apt update
+sudo apt install -y \
+    build-essential cmake git pkg-config \
+    libusb-1.0-0-dev \
+    python3-dev python3-pip python3-numpy python3-scipy python3-matplotlib \
+    python3-libgpiod libgpiod-dev \
+    fpgautil device-tree-compiler
+```
+
+The `fpgautil` and `device-tree-compiler` packages come from the AMD/Xilinx Kria archive. If `fpgautil` is missing, follow the [Canonical Kria install guide](https://ubuntu.com/download/amd) to add the Xilinx PPA.
+
+### 2. SoapySDR + libbladeRF + SoapyBladeRF (build from source)
+
+The Ubuntu 22.04 packaged versions of `soapysdr` and `libbladerf` are too old to stream cleanly at 1 MS/s coherent on the Kria. Build all three from upstream:
+
+```bash
+# SoapySDR
+cd ~ && git clone https://github.com/pothosware/SoapySDR.git
+cd SoapySDR && mkdir build && cd build
+cmake .. && make -j$(nproc) && sudo make install
+sudo ldconfig
+
+# libbladeRF (Nuand)
+cd ~ && git clone https://github.com/Nuand/bladeRF.git
+cd bladeRF/host && mkdir build && cd build
+cmake .. && make -j$(nproc) && sudo make install
+sudo ldconfig
+
+# SoapyBladeRF (Pothosware)
+cd ~ && git clone https://github.com/pothosware/SoapyBladeRF.git
+cd SoapyBladeRF && mkdir build && cd build
+cmake .. && make -j$(nproc) && sudo make install
+sudo ldconfig
+```
+
+Verify:
+
+```bash
+SoapySDRUtil --info | grep -i bladerf      # SoapyBladeRF should be listed
+SoapySDRUtil --rate-test --args="driver=bladerf" --rate=1e6
+# Expect "All complete!" with no overflow warnings.
+```
+
+### 3. u-dma-buf (DMA-coherent buffer for the BladeRF → DDR data path)
+
+The KV260 image blocks `/dev/mem` (`CONFIG_STRICT_DEVMEM=y`), so the driver allocates DMA buffers via [u-dma-buf](https://github.com/ikwzm/udmabuf) instead. Build from source (apt and DKMS packages are stale on Ubuntu 22.04 aarch64):
+
+```bash
+cd ~ && git clone https://github.com/ikwzm/udmabuf.git
+cd udmabuf && make
+sudo make install
+# Verify the module loads:
+sudo modprobe u-dma-buf udmabuf0=12288
+ls /sys/class/u-dma-buf/      # should show udmabuf0
+```
+
+The u-dma-buf module is non-persistent across reboots — `bench_bringup.sh` re-modprobes on every session.
+
+### 4. BladeRF udev rules
+
+```bash
+sudo tee /etc/udev/rules.d/88-nuand.rules > /dev/null << 'EOF'
+ATTR{idVendor}=="2cf0", ATTR{idProduct}=="5246", MODE="0660", GROUP="plugdev"
+ATTR{idVendor}=="2cf0", ATTR{idProduct}=="5250", MODE="0660", GROUP="plugdev"
+EOF
+sudo udevadm control --reload-rules && sudo udevadm trigger
+sudo usermod -aG plugdev $USER
+# log out + back in for the group change
+```
+
+### 5. Deploy the driver and bring-up scripts
+
+```bash
+# From a host PC:
+scp -r kv260_headless/ ubuntu@<kv260-ip>:~/doa/
+scp fpga/vivado_kv260/built/*.bit.bin ubuntu@<kv260-ip>:~/doa/
+scp fpga/vivado_kv260/built/*.dtbo    ubuntu@<kv260-ip>:~/doa/
+scp scripts/bench_bringup.sh          ubuntu@<kv260-ip>:~/doa/
+```
+
+### 6. Bring-up + first capture
+
+```bash
+# On the KV260:
+sudo bash ~/doa/bench_bringup.sh   # idempotent: unloadapp + fpgautil + udmabuf + EMIO gate
+
+# Then run a 60 s capture:
+sudo python3 ~/doa/aoa_estimation_fpga_kv260.py \
+    --filter none --algo rootmusic --freq 2.418e9 --gain 50
+```
+
+You should see real-time AoA estimates printed to stdout at ≈7.7 Hz.
+
+### Gotchas
+
+- **BladeRF barrel jack must be powered before the KV260 USB connection.** USB 5 V at the SoM port is not enough current at full RF gain.
+- **`/dev/mem` is blocked.** Use UIO + udmabuf, not `mmap` on `/dev/mem`. Sysfs path is `/sys/class/u-dma-buf/`.
+- **`kria-dashboard` snap can reload starter kits mid-session.** If the bitstream evaporates after a few minutes, re-run `bench_bringup.sh` or `sudo snap disable kria-dashboard`.
+- **Fan-gate pin A12 must be driven constantly high** in any custom bitstream, or the carrier card thermally shuts the SOM down within 15–60 s. The supplied `kv260_emio_doa.bit.bin` already does this.
+- **No RTC** on the carrier — `sudo date -s ...` after each reboot if your captures need real timestamps.
+
+---
+
+## Cora Z7 (legacy reference)
+
+The Cora pipeline is preserved as a validated end-to-end baseline on the `feature/fir-backpressure` branch:
+
+```bash
+git fetch origin feature/fir-backpressure
+git checkout feature/fir-backpressure
+cat cora_headless/README.md   # full deployment notes
+```
+
+The Cora path uses GNU Radio 3.10.12 + `gnuradio.soapy` (not gr-osmosdr) + `gr-aoa` and PetaLinux 2025.2. It is not actively maintained on `main` — see the README's "Why two platforms?" section for context.
 
 ---
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| BladeRF not detected | Check USB cable, run `bladeRF-cli -p` with sudo |
-| gr-aoa blocks missing | Re-run `sudo ldconfig`, restart GRC |
-| Python import error | Check PYTHONPATH includes /usr/local/lib |
-| No signal in spectrum | Verify TX is running, check frequency |
-| Noisy AoA estimates | Enable band-pass filter, reduce WiFi interference |
-
----
-
-## Contact
-
-For questions about this experiment setup, refer to:
-- Paper: Wachowiak & Kryszkiewicz (2022), doi:10.1007/s11276-022-03010-z
-- gr-aoa repo: https://github.com/MarcinWachowiak/gr-aoa
-  On the Arch Laptop
-
-  # 1. Install deps
-  sudo pacman -S python python-numpy python-matplotlib
-
-  # 2. Copy from USB
-  cp -r /path/to/usb/doa_24ghz_thesis ~/doa_24ghz_thesis
-
-  # 3. Run the demo (shows calibration plots + DoA algorithm comparison)
-  cd ~/doa_24ghz_thesis
-  python scripts/demo_calibration.py
-
-  # 4. Try different simulated source angles
-  python scripts/demo_calibration.py --sim-angle 45
-  python scripts/demo_calibration.py --sim-angle -20
-  python scripts/demo_calibration.py --sim-angle 0
-
-  # 5. View raw IQ data individually
-  python scripts/view_iq_data.py recordings/cal_run1/cal_ch0.32fc
-  python scripts/view_iq_data.py recordings/cal_run1/cal_ch1.32fc
-
-
-  The demo_calibration.py script will automatically find the calibration files in recordings/cal_run1/ and show:
-  - Raw IQ time domain (both channels)
-  - Power spectral density
-  - Inter-channel phase measurement over time (the calibration result)
-  - MUSIC spatial spectrum for a simulated source
-  - Bar chart comparing all 4 algorithms (Phase Diff, MUSIC, Root-MUSIC, MVDR)
-  ctrl+q to copy · 4 snippets
+| Issue | First thing to check |
+|-------|----------------------|
+| `SoapySDRUtil --info` doesn't list bladerf | `sudo ldconfig`, confirm SoapyBladeRF install path is in `/usr/local/lib/SoapySDR/modules*/` |
+| `bladeRF-cli -p` hangs | Barrel jack 5 V is missing or undervolt — verify with a multimeter |
+| Driver immediately exits with `OSError: [Errno 19] No such device` | `bench_bringup.sh` didn't run, or `kria-dashboard` reaped the bitstream |
+| `run_snapshot` returns `None` ~12% of the time | Known: fabric STATUS_VALID race; in-flight work, not a configuration error |
+| AoA rate ≈ 1 Hz instead of ≈ 7 Hz with `--filter=none` | Pre-2026-04-29 driver — pull latest and rerun |

@@ -1,26 +1,13 @@
-# DOA-24GHz Thesis Project Dependencies
+# DOA-24GHz — host PC requirements (Path A in INSTALL_GUIDE.md)
 # Install with: pip install -r requirements.txt
+#
+# These cover offline analysis (replaying captured CSVs, regenerating plots).
+# The KV260 deployment (Path B) installs SoapySDR / libbladeRF / SoapyBladeRF
+# and python3-libgpiod from system packages or source — see INSTALL_GUIDE.md.
 
-# Core scientific computing
 numpy>=1.24.0
 scipy>=1.10.0
 matplotlib>=3.7.0
 
-# Data storage
-h5py>=3.8.0
-
-# Config files
-pyyaml>=6.0.1
-
-# Optional: for advanced analysis
-# pandas>=2.0.0
-# scikit-learn>=1.2.0
-
-# Hardware interface (install separately if using BladeRF)
-# pybladerf  # Build from source: https://github.com/Nuand/bladeRF
-
-# Development
-# pytest>=7.0.0
-# black>=23.0.0
-# flake8>=6.0.0
-
+# Optional: enable if you keep large IQ datasets in HDF5 instead of CSV
+# h5py>=3.8.0
